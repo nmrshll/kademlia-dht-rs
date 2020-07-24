@@ -39,7 +39,6 @@ pub struct ReqHandle {
     req: Request,
     rpc: Rpc,
 }
-
 impl ReqHandle {
     pub fn get_req(&self) -> &Request {
         &self.req
@@ -64,7 +63,6 @@ pub struct Rpc {
     pending: Arc<Mutex<HashMap<Key, Sender<Option<Reply>>>>>,
     node_info: Node,
 }
-
 impl Rpc {
     pub fn open(socket: UdpSocket, tx: Sender<ReqHandle>, node_info: Node) -> Rpc {
         let rpc = Rpc {

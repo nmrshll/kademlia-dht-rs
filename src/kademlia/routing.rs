@@ -25,13 +25,11 @@ impl PartialEq for KnownNode {
         self.distance.eq(&other.distance)
     }
 }
-
 impl PartialOrd for KnownNode {
     fn partial_cmp(&self, other: &KnownNode) -> Option<Ordering> {
         Some(other.distance.cmp(&self.distance))
     }
 }
-
 impl Ord for KnownNode {
     fn cmp(&self, other: &KnownNode) -> Ordering {
         other.distance.cmp(&self.distance)

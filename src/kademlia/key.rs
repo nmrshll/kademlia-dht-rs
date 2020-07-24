@@ -8,7 +8,6 @@ pub const KEY_LEN: usize = 20; // = 160 bits
 
 #[derive(Hash, Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Serialize, Deserialize)]
 pub struct Key([u8; KEY_LEN]);
-
 impl Key {
     /// Returns a random, KEY_LEN long byte string.
     pub fn random() -> Key {
@@ -45,7 +44,6 @@ impl Key {
         Distance(res)
     }
 }
-
 impl Debug for Key {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         for x in self.0.iter() {
@@ -57,7 +55,6 @@ impl Debug for Key {
 
 #[derive(Hash, Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Serialize, Deserialize)]
 pub struct Distance([u8; KEY_LEN]);
-
 impl Distance {
     pub fn zeroes_in_prefix(&self) -> usize {
         for i in 0..KEY_LEN {
@@ -70,7 +67,6 @@ impl Distance {
         KEY_LEN * 8 - 1
     }
 }
-
 impl Debug for Distance {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         for x in self.0.iter() {
