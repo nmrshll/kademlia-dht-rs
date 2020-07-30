@@ -39,7 +39,7 @@ impl Key {
     pub fn dist(&self, y: Key) -> Distance {
         let mut res = [0; KEY_LEN];
         for i in 0usize..KEY_LEN {
-            res[i] = self.0[i] ^ y.0[i];
+            res[i] = self.0[i] ^ y.0[i]; // TODO vectorize
         }
         Distance(res)
     }

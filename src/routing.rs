@@ -16,6 +16,7 @@ pub struct Node {
 
 #[derive(Eq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct KnownNode {
+    // is KnownNode even needed ? Maybe calculate the distance dynamically
     pub node: Node,
     pub distance: Distance,
 }

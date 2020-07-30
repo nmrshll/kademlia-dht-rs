@@ -6,9 +6,9 @@ use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use super::key::Key;
-use super::networking::{ReqHandle, Rpc};
-use super::routing::{KnownNode, Node, RoutingTable, K_ENTRIES_PER_BUCKET};
+use crate::key::Key;
+use crate::networking::{ReqHandle, Rpc};
+use crate::routing::{KnownNode, Node, RoutingTable, K_ENTRIES_PER_BUCKET};
 
 pub const A_CONCURRENT_REQUESTS: usize = 3;
 
@@ -64,7 +64,7 @@ impl Kademlia {
             &node_info.addr, &node_info.id
         );
 
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = mpsc::channel(); // what is this for again ?
         let rpc = Rpc::open(socket, tx, node_info.clone());
 
         let node = Kademlia {

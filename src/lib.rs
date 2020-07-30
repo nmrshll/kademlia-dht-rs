@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate serde_derive;
+
 pub mod kademlia;
 pub mod key;
 pub mod networking;
