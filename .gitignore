@@ -1,1 +1,3 @@
-target/
+**/target/
+**/.cache/
+examples/Cargo.lock

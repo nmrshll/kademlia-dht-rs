@@ -1,8 +1,9 @@
 [package]
 authors = ["Nicolas Marshall <marshall.nicolas@gmail.com>"]
 edition = "2018"
-name = "kademlia-rs"
+name = "kademlia"
 version = "0.1.0"
+
 [dependencies]
 log = "*"
 rand = "*"
@@ -10,3 +11,6 @@ rust-crypto = "*"
 serde = "*"
 serde_derive = "*"
 serde_json = "*"
+
+
+
