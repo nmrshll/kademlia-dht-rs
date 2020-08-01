@@ -1,7 +1,8 @@
 use kademlia::{Kademlia, Key, Node};
 
 fn main() {
-    println!("Hello, world!");
+    std::env::set_var("RUST_LOG", "simple=trace");
+    std::env::set_var("RUST_BACKTRACE", "1");
 
     let kad = Kademlia::start(String::from("test_net"), Key::random(), "127.0.0.1:0", None);
     // let mut dummy_info = Node {
@@ -13,11 +14,11 @@ fn main() {
     let input = std::io::stdin();
     loop {
         let mut buffer = String::new();
+        println!("Press Enter to ping self");
         if input.read_line(&mut buffer).is_err() {
             break;
         }
         // let args = buffer.trim_right().split(' ').collect::<Vec<_>>();
-        println!("Press Enter to ping self");
 
         // auto-ping
         let mut dummy_info = Node {
