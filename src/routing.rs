@@ -42,6 +42,7 @@ pub struct RoutingTable {
     node_info: Node,
     buckets: Vec<Vec<Node>>,
 }
+// TODO: routingTable keeps open/reconnecting TCP connection handles
 
 impl RoutingTable {
     pub fn new(node_info: Node) -> RoutingTable {

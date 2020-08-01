@@ -1,6 +1,6 @@
-// use serde::{Deserialize, Serialize};
+// use anyhow::Error as AnyErr;
 use std::collections::HashMap;
-use std::net::UdpSocket;
+use std::net::{SocketAddr, UdpSocket};
 use std::str;
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
@@ -85,6 +85,7 @@ impl Rpc {
                     warn!("Message from different net_id received, ignoring.");
                     continue;
                 }
+                // no passing mesages ???
                 if rmsg.dst.id != rpc.node_info.id {
                     warn!("Message received, but dst id does not match this node, ignoring.");
                     continue;
@@ -134,15 +135,24 @@ impl Rpc {
 
     /// Sends a message
     fn send_msg(&self, rmsg: &RpcMessage, addr: &str) {
-        let enc_msg = serde_json::to_string(rmsg).unwrap();
-        self.socket.send_to(&enc_msg.as_bytes(), addr).unwrap();
+        let enc_msg = serde_json::to_vec(rmsg).expect("failed serde");
+        //TEMP
+        let remote_addr: SocketAddr = std::env::args()
+            .nth(1)
+            .unwrap_or_else(|| "127.0.0.1:8080".into())
+            .parse()
+            .expect("failed parsing remote addr");
+        if self.socket.send_to(&enc_msg, addr).is_err() {
+            dbg!("HERE");
+            info!("Protocol: Could not send data.");
+        }
         debug!("| OUT | {:?} ==> {:?} ", rmsg.msg, rmsg.dst.id);
     }
 
     /// Sends a request of data from src_info to dst_info, returning a Receiver for the reply
     pub fn send_req(&self, req: Request, dst: Node) -> Receiver<Option<Reply>> {
         let (tx, rx) = mpsc::channel();
-        let mut pending = self.pending.lock().unwrap();
+        let mut pending = self.pending.lock().expect("faild locking self pending");
         let mut token = Key::random();
         while pending.contains_key(&token) {
             token = Key::random();

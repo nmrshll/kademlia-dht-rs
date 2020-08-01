@@ -149,8 +149,8 @@ impl Kademlia {
     }
 
     pub fn ping(&self, dst: Node) -> Option<()> {
-        let rep = self.ping_raw(dst.clone()).recv().unwrap(); // err: pending reply channel closed
-        let mut routes = self.routes.lock().unwrap();
+        let rep = self.ping_raw(dst.clone()).recv().expect("failed recv"); // err: pending reply channel closed
+        let mut routes = self.routes.lock().expect("failed routes lock");
         if let Some(Reply::Ping) = rep {
             routes.update(dst);
             Some(())
