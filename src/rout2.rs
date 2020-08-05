@@ -1,8 +1,6 @@
 use std::cmp::Ordering;
 use std::error::Error;
 use std::net::SocketAddr;
-// use tokio::net::TcpListener;
-use tracing::Level;
 
 use super::key::{Distance, Key, KEY_LEN};
 
@@ -123,16 +121,18 @@ impl<'a> RoutingTable<'a> {
         {
             self.buckets[bucket_index].remove(item_index);
         } else {
-            warn!("Tried to remove routing entry that doesn't exist."); // TODO return Error
+            tracing::warn!("Tried to remove routing entry that doesn't exist.");
+            // TODO return Error
         }
     }
 
+    /// TODO document
     fn lookup_bucket_index(&self, item: Key) -> usize {
-        self.node_info.id.dist(item).zeroes_in_prefix()
+        self.node_self.id.dist(item).zeroes_in_prefix()
     }
 
     // TODO impl Debug
     pub fn print(&self) {
-        info!("{:?}", self.buckets);
+        tracing::info!("{:?}", self.buckets);
     }
 }
