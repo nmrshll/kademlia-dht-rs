@@ -14,9 +14,9 @@ serde = "*"
 serde_derive = "*"
 serde_json = "*"
 anyhow = "1.0.25"
+tracing = "0.1" # for async info/warn/trace
 
 [dev-dependencies]
-tracing = "0.1"
 tracing-subscriber = "0.2"
 
 
