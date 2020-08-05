@@ -1,10 +1,11 @@
-use kademlia::net2::RpcClient;
+// use kademlia::net2::RpcClient;
+use std::error::Error;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use tracing::Level;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), Box<dyn Error>> {
     let subscriber = tracing_subscriber::fmt()
         .with_max_level(Level::TRACE)
         .finish();
