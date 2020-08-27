@@ -11,7 +11,11 @@ pub const K_ENTRIES_PER_BUCKET: usize = 8;
 pub struct Node {
     pub id: Key,
     pub addr: String,
-    pub net_id: String,
+    pub net_id: String, // TODO move to RoutingTable ?
+}
+impl Node {
+    // returns the current Node
+    pub fn me(&self) {}
 }
 
 #[derive(Eq, Hash, Clone, Debug, Serialize, Deserialize)]
@@ -40,7 +44,7 @@ impl Ord for KnownNode {
 #[derive(Debug)]
 pub struct RoutingTable {
     node_info: Node,
-    buckets: Vec<Vec<Node>>,
+    buckets: Vec<Vec<Node>>, // TODO async task to manage this
 }
 // TODO: routingTable keeps open/reconnecting TCP connection handles
 

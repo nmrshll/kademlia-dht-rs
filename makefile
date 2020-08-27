@@ -4,10 +4,10 @@ ex.tokio:
 	cargo run --example hello_tokio
 ex.simple:
 	RUST_LOG=trace cargo watch -x 'run --example simple'
-ex.net2:
-	cargo run --example net2
+ex.kad2:
+	cargo run --example kad2
 nc:
-	nc 127.0.0.1 8080
+	nc 0.0.0.0 8908
 
 
 

@@ -8,16 +8,16 @@ pub const N_BUCKETS: usize = KEY_LEN * 8;
 pub const K_ENTRIES_PER_BUCKET: usize = 8;
 
 #[derive(Hash, Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
-pub struct Node<'a> {
+pub struct Node {
     pub id: Key,
-    pub addr: SocketAddr, // TODO &'a (prob with Deserialize)
-    pub net_id: String,   // TODO move to RoutingTable ?
+    pub addr: SocketAddr,
+    pub net_id: String, // TODO move to RoutingTable ?
 }
-impl<'a> Node<'a> {
-    pub fn new_self(addr: &'a SocketAddr) -> Result<Self, Box<dyn Error>> {
+impl Node {
+    pub fn new_self(addr: &SocketAddr) -> Result<Self, Box<dyn Error>> {
         Ok(Node {
             id: Key::random(),
-            addr: addr.clone(),
+            addr: addr.clone(), // TODO &'a (prob with Deserialize)
             net_id: String::from("tender_test_net"),
         })
     }
@@ -27,22 +27,22 @@ impl<'a> Node<'a> {
 /// At the moment, we score (and sort) other nodes only by distance
 /// Longer term, we want to include other factors into the score (uptime, public IP?, trust score, well known nodes)
 /// There's no consensus on score. Each peer maintains is own score list independently.
-#[derive(Eq, Hash, Clone, Debug, Serialize, Deserialize)]
-pub struct KnownNode<'a> {
-    pub node: Node<'a>, // TODO &'a (prob with Deserialize)
+#[derive(Eq, Hash, Clone, Debug, Serialize)] // TODO ? Deserialize
+pub struct KnownNode {
+    pub node: Node,
     pub distance: Distance,
 }
-impl<'a> PartialEq for KnownNode<'a> {
+impl PartialEq for KnownNode {
     fn eq(&self, other: &KnownNode) -> bool {
         self.distance.eq(&other.distance)
     }
 }
-impl<'a> PartialOrd for KnownNode<'a> {
+impl PartialOrd for KnownNode {
     fn partial_cmp(&self, other: &KnownNode) -> Option<Ordering> {
         Some(other.distance.cmp(&self.distance))
     }
 }
-impl<'a> Ord for KnownNode<'a> {
+impl Ord for KnownNode {
     fn cmp(&self, other: &KnownNode) -> Ordering {
         other.distance.cmp(&self.distance)
     }
@@ -50,28 +50,28 @@ impl<'a> Ord for KnownNode<'a> {
 
 /// RoutingTable keeps nodes sorted, gets updated on requests
 #[derive(Debug)]
-pub struct RoutingTable<'a> {
-    node_self: &'a Node<'a>,
-    buckets: Vec<Vec<Node<'a>>>, // TODO mutex with slot-level locking (i.e. inside the Vec<Vec<>>) (rather than on the whole routing table)
+pub struct RoutingTable {
+    pub node_self: Node,
+    buckets: Vec<Vec<Node>>, // TODO mutex with slot-level locking (i.e. inside the Vec<Vec<>>) (rather than on the whole routing table)
 }
-impl<'a> RoutingTable<'a> {
-    pub fn new(node_self: &'a Node<'a>) -> Self {
+impl<'a> RoutingTable {
+    pub fn new(node_self: &'a Node) -> Self {
         let mut buckets = Vec::new();
         for _ in 0..N_BUCKETS {
             buckets.push(Vec::new());
         }
         let mut ret = RoutingTable {
-            node_self: &node_self,
+            node_self: node_self.clone(),
             buckets: buckets,
         };
-        ret.update(node_self.clone()); // TODO &'a
+        ret.update(node_self); // TODO &'a
         ret
     }
 
     // pub fn distance_to(other_node: Node) -> Distance {}
 
     /// Update the appropriate bucket with the new node's info
-    pub fn update(&mut self, node_info: Node) {
+    pub fn update(&mut self, node_info: &'a Node) {
         let bucket_index = self.lookup_bucket_index(node_info.id);
         let bucket = &mut self.buckets[bucket_index];
         let node_index = bucket.iter().position(|x| x.id == node_info.id);
@@ -82,7 +82,7 @@ impl<'a> RoutingTable<'a> {
             }
             None => {
                 if bucket.len() < K_ENTRIES_PER_BUCKET {
-                    bucket.push(node_info);
+                    bucket.push(node_info.clone()); // TODO ? clone ?
                 } else {
                     // go through bucket, pinging nodes, replace one
                     // that doesn't respond.
@@ -104,7 +104,7 @@ impl<'a> RoutingTable<'a> {
             for node_info in bucket {
                 ret.push(KnownNode {
                     node: node_info.clone(),
-                    distance: node_info.id.dist(item),
+                    distance: node_info.id.dist(target),
                 });
             }
         }

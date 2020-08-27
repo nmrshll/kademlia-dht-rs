@@ -31,10 +31,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
             // In a loop, read data from the socket and write the data back.
             loop {
-                if let Err(e) = stream.read(&mut buf).await {
-                    tracing::info!("an error occurred; error = {:?}", e);
-                }
-
                 match stream.read(&mut buf).await {
                     Err(e) => tracing::info!("an error occurred; error = {:?}", e),
                     // no data back
@@ -46,24 +42,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             .expect("failed to write data to socket");
                     }
                 }
-
-                // if n == 0 {
-                //     return;
-                // }
-
-                // socket
-                //     .write_all(&buf[0..n])
-                //     .await
-                //     .expect("failed to write data to socket");
             }
         });
-
-        // tokio::spawn(async move {
-        //     tracing::debug!("accepted connection");
-        //     if let Err(e) = process(state, stream, addr).await {
-        //         tracing::info!("an error occurred; error = {:?}", e);
-        //     }
-        // });
     }
 
     //  Send request. won't run here
