@@ -15,9 +15,14 @@ serde = "1.0.92"
 serde_derive = "1.0.92"
 serde_json = "1.0.39"
 anyhow = "1.0.25"
+thiserror = "1.0.20"
 tracing = "0.1" # for async info/warn/trace
-# bytes = "0.5.4" # for tokio codecs
+# TEMP tokio codecs
+bytes = "0.5.4" # for tokio codecs
 tokio-serde-json = "0.2" # for tokio codecs
+futures = "0.3.5" # for tokio serde json/bincode
+tokio-serde-bincode = "*"
+bincode = "1.0"
 
 [dev-dependencies]
 tracing-subscriber = "0.2"

@@ -8,6 +8,8 @@ ex.kad2:
 	cargo run --example kad2
 nc:
 	nc 0.0.0.0 8908
+test:
+	cargo test -- --nocapture
 
 
 
