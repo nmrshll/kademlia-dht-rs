@@ -21,13 +21,13 @@ fn main() {
         // let args = buffer.trim_right().split(' ').collect::<Vec<_>>();
 
         // auto-ping
-        let mut dummy_info = Node {
+        let dummy_info = Node {
             net_id: String::from("test_net"),
             addr: String::from("asdfasdf"),
             id: Key::random(),
         };
 
-        let pingRes = kad.ping(dummy_info.clone());
+        let _ping_res = kad.ping(dummy_info.clone());
 
         // match args[0].as_ref() {
         //     "p" => {

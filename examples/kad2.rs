@@ -1,8 +1,5 @@
-// use kademlia::net2::RpcClient;
 use kademlia::kad2::Kad2;
 use std::error::Error;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::TcpListener;
 use tracing::Level;
 
 #[tokio::main]
@@ -16,7 +13,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let addr = kad.node_self.addr;
     let task_kad = kad.start_echo().await?;
     tracing::info!("server running on {}", addr);
-    tokio::join!(task_kad);
+    let _ = tokio::join!(task_kad);
 
     Ok(())
 }

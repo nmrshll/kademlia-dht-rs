@@ -20,7 +20,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Start a server
     loop {
         // Asynchronously wait for an inbound TcpStream.
-        let (mut stream, addr) = listener.accept().await?;
+        let (mut stream, _addr) = listener.accept().await?;
 
         // Clone a handle to the `Shared` state for the new connection.
         // let state = Arc::clone(&state);
