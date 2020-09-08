@@ -6,10 +6,11 @@ pub mod kademlia;
 pub mod key;
 pub mod net2;
 pub mod networking;
+pub mod req2;
 pub mod rout2;
 pub mod routing;
 
-pub use kademlia::*;
+pub use self::kademlia::*;
 pub use key::*;
 pub use networking::*;
 pub use routing::*;
