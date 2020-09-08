@@ -1,0 +1,5 @@
+- networking: Request instead of DummyData
+  - fix tests for Request Codec
+  - figure out streaming several Requests with Codec
+- netowrking: prost protobufs instead of JSON ?
+- start Request handlers
