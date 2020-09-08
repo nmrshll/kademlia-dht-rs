@@ -27,7 +27,7 @@ impl Node {
 /// At the moment, we score (and sort) other nodes only by distance
 /// Longer term, we want to include other factors into the score (uptime, public IP?, trust score, well known nodes)
 /// There's no consensus on score. Each peer maintains is own score list independently.
-#[derive(Eq, Hash, Clone, Debug, Serialize)] // TODO ? Deserialize
+#[derive(Eq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct KnownNode {
     pub node: Node,
     pub distance: Distance,
