@@ -1,15 +1,23 @@
-// use std::collections::HashMap;
 use std::error::Error;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
+// use tokio::stream::StreamExt;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
+// use tokio_serde::formats::*;
+// use tokio_serde::{formats::Cbor, Framed};
+// use futures::stream;
+// use futures::stream::Stream;
+// use tokio::prelude::*;
+// use tokio_serde_bincode::ReadBincode;
+use tokio_util::codec::{FramedRead, LengthDelimitedCodec};
 
 // use crate::key::Key;
-use crate::rout2::{KnownNode, Node, RoutingTable, K_ENTRIES_PER_BUCKET};
+use crate::rout2::{Node, RoutingTable};
 // use crate::routing::KnownNode;
+// use crate::req2::DummyData;
 
 #[derive(Clone)]
 pub struct Kad2 {
@@ -45,7 +53,7 @@ impl<'k> Kad2 {
                     }
                     Ok((stream, _)) => {
                         tokio::spawn(async move {
-                            Self::handle_stream(stream).await; // TODO err handling
+                            Self::handle_echo_stream(stream).await; // TODO err handling
                         });
                     }
                 }
@@ -55,7 +63,7 @@ impl<'k> Kad2 {
         Ok(task_echo)
     }
 
-    pub async fn handle_stream(mut stream: TcpStream) {
+    pub async fn handle_echo_stream(mut stream: TcpStream) {
         let mut buf = [0u8; 1024];
         // In a loop, read data from the socket and write the data back.
         loop {
@@ -102,9 +110,65 @@ impl<'k> Kad2 {
     //     Ok(())
     // }
 
-    pub fn start(&self, bootstrap: Option<Node>) {}
+    pub async fn start(&self, bootstrap: Option<Node>) -> Result<JoinHandle<()>, Box<dyn Error>> {
+        let addr = &self.node_self.addr.clone();
+        let mut listener = TcpListener::bind(addr).await?;
+
+        // Start a server
+        let task_echo = tokio::spawn(async move {
+            loop {
+                // Asynchronously wait for an inbound TcpStream.
+                match listener.accept().await {
+                    Err(e) => {
+                        tracing::warn!("failed starting listener: {:?}", e);
+                        break;
+                    }
+                    Ok((mut stream, _)) => {
+                        // process streams asynchronously
+                        tokio::spawn(async move {
+                            Self::handle_echo_stream(stream).await; // TODO err handling
+                        });
+                    }
+                }
+            }
+        });
+
+        Ok(task_echo)
+    }
+
+    pub async fn handle_stream(mut stream: TcpStream) {
+        // use futures::Stream;
+        // let length_delimited = FramedRead::new(stream, LengthDelimitedCodec::new()).into();
+        // Deserialize frames
+        // let delimited_stream = length_delimited::Builder::new().new_read(stream);
+        // .from_err::<bincode::Error>();
+        // Deserialize each frame
+        // let deserialized: ReadBincode<_, DummyData> = ReadBincode::new(length_delimited);
+
+        // tokio::spawn(
+        //     deserialized
+        //         .into_inner()
+        //         .for_each(|msg: DummyData| Ok(println!("Got: {:?}", msg)))
+        //         .map_err(|_| ()),
+        // );
+
+        // Spawn a task that prints all received messages to STDOUT
+        // tokio::spawn(async move {
+        //     while let Some(msg) = deserialized.try_next().await.unwrap() {
+        //         println!("GOT: {:?}", msg);
+        //     }
+        // });
+    }
 
     // pub async fn node_self(&self) -> Node {
     //     self.routes.lock().await.node_self.clone() // TODO rm mutex, give back &'k node_self
     // }
 }
+
+// TOKIO CODEC BINCODE
+// FramedRead upgrades TcpStream from an AsyncRead to a Stream
+type IOErrorStream = FramedRead<TcpStream, LengthDelimitedCodec>;
+// stream::FromErr maps underlying IO errors into Bincode errors
+// type BincodeErrStream = stream::FromErr<IOErrorStream, bincode::Error>;
+// ReadBincode maps underlying bytes into Bincode-deserializable structs
+// type BincodeStream = ReadBincode<BincodeErrStream, DummyData>;
