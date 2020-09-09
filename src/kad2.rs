@@ -88,13 +88,12 @@ impl<'k> Kad2 {
             loop {
                 let (stream, _addr) = listener.accept().await.map_err(|e: std::io::Error| {
                     tracing::warn!("failed listener.accept(): {:?}", e);
-                    return e;
-                })?;
+                    return MyCodecErr::from(e); // TODO not MyCodecErr
+                })?; // returns Result<_, MyCodecErr>
                 tokio::spawn(async move {
                     Self::handle_stream(stream).await; // TODO err handling
                 });
             }
-            Ok::<_, MyCodecErr>(()) // TODO not MyCodecErr
         });
 
         Ok(task_kad)
@@ -103,13 +102,13 @@ impl<'k> Kad2 {
     pub async fn handle_stream(mut stream: TcpStream) {
         // create a codec per connection to parse all messages sent on that connection
         let codec = MyCodec::new();
-        let mut framedCodecStream = codec.framed(stream); // no split ?
+        let mut framed_codec_stream = codec.framed(stream); // no split ?
 
         // Spawn a task that prints all received messages to STDOUT
         tokio::spawn(async move {
-            while let Some(res) = framedCodecStream.next().await {
+            while let Some(res) = framed_codec_stream.next().await {
                 match res {
-                    Ok(dummyData) => println!("GOT: {:?}", dummyData),
+                    Ok(dd) => println!("GOT: {:?}", dd),
                     Err(e) => println!("ERROR: {}", e),
                 }
             }
