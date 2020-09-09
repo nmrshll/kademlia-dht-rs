@@ -35,9 +35,7 @@ pub struct DummyData {
     // pub hello: String,
 }
 
-use bytes::{BufMut, Bytes, BytesMut};
-// use tokio::net::TcpStream;
-use serde_json::Value;
+use bytes::{BufMut, BytesMut};
 use std::io;
 use tokio_util::codec::{Decoder, Encoder};
 
@@ -61,21 +59,11 @@ impl Decoder for MyCodec {
         //     return Err(MyCodecErr::NoImpl);
         // }
 
-        // 3. If the bytes are valid, consume all the bytes in the current frame
-        // and return Ok(Some(DummyData::EventKind))
-        let dd: DummyData = match serde_json::from_reader(src.as_ref()) {
-            // TODO tomorrow: fork into examples repo
-            // TODO consume bytes, empty srcBuf first
-            Err(e) => {
-                src.clear();
-                return Err(e.into());
-            }
-            Ok(dd) => dd,
-        };
-        dbg!(&dd);
+        // 3. If the bytes are valid, consume all bytes in the current frame into new BytesMut
+        // and return Ok(Some(DummyData))
+        let src_cp = src.split(); // empties src
+        let dd: DummyData = serde_json::from_reader(src_cp.as_ref())?;
 
-        // src.split_to(next_start_index); // truncate src here too
-        src.clear();
         return Ok(Some(dd));
     }
 }
@@ -83,7 +71,7 @@ impl Decoder for MyCodec {
 impl Encoder<DummyData> for MyCodec {
     type Error = MyCodecErr;
 
-    fn encode(&mut self, data: DummyData, dest: &mut BytesMut) -> Result<(), MyCodecErr> {
+    fn encode(&mut self, _data: DummyData, dest: &mut BytesMut) -> Result<(), MyCodecErr> {
         dest.put_uint(1u64, 64); // TODO replace this with real encoding
         Ok(())
     }
@@ -147,8 +135,8 @@ mod tests {
                     break;
                 }
                 // output is Ok(some) or Err
-                Ok(Some(dummyData)) => result.push(Ok(dummyData)),
-                Err(myCodecErr) => result.push(Err(myCodecErr)),
+                Ok(Some(dd)) => result.push(Ok(dd)),
+                Err(e) => result.push(Err(e)),
             }
         }
         return result;

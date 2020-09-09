@@ -137,7 +137,7 @@ impl Rpc {
     fn send_msg(&self, rmsg: &RpcMessage, addr: &str) {
         let enc_msg = serde_json::to_vec(rmsg).expect("failed serde");
         //TEMP
-        let remote_addr: SocketAddr = std::env::args()
+        let _remote_addr: SocketAddr = std::env::args()
             .nth(1)
             .unwrap_or_else(|| "127.0.0.1:8080".into())
             .parse()

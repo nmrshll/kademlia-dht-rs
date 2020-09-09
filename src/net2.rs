@@ -31,7 +31,7 @@ impl RpcClient {
     }
     pub async fn send(&self) -> Result<(), AnyErr> {
         let rmsg = "yoyoyo";
-        let enc_msg = serde_json::to_vec(rmsg).expect("failed serde");
+        let _enc_msg = serde_json::to_vec(rmsg).expect("failed serde");
         //TEMP
         let remote_addr: SocketAddr = std::env::args()
             .nth(1)
@@ -39,7 +39,7 @@ impl RpcClient {
             .parse()
             .expect("failed parsing remote addr");
         let mut stream = TcpStream::connect(remote_addr).await?;
-        let (r, mut w) = stream.split();
+        let (_r, mut w) = stream.split();
 
         let result = w.write(b"hello world\n").await?;
         println!("wrote res: {}", result);

@@ -50,5 +50,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // let rpcc = RpcClient::new();
     // rpcc.send().await?;
 
+    #[allow(unreachable_code)]
     Ok(())
 }

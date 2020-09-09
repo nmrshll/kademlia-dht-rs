@@ -6,7 +6,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::stream::StreamExt;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
-use tokio_util::codec::{Decoder, FramedRead, LengthDelimitedCodec};
+use tokio_util::codec::Decoder;
 
 // use crate::key::Key;
 use crate::req2::{MyCodec, MyCodecErr};
@@ -78,7 +78,7 @@ impl<'k> Kad2 {
 
     pub async fn start(
         &self,
-        bootstrap: Option<Node>,
+        _bootstrap: Option<Node>,
     ) -> Result<JoinHandle<Result<(), MyCodecErr>>, Box<dyn Error>> {
         let addr = &self.node_self.addr.clone();
         let mut listener = TcpListener::bind(addr).await?;
@@ -99,7 +99,7 @@ impl<'k> Kad2 {
         Ok(task_kad)
     }
 
-    pub async fn handle_stream(mut stream: TcpStream) {
+    pub async fn handle_stream(stream: TcpStream) {
         // create a codec per connection to parse all messages sent on that connection
         let codec = MyCodec::new();
         let mut framed_codec_stream = codec.framed(stream); // no split ?
@@ -123,7 +123,7 @@ impl<'k> Kad2 {
 
 // TOKIO CODEC BINCODE
 // FramedRead upgrades TcpStream from an AsyncRead to a Stream
-type IOErrorStream = FramedRead<TcpStream, LengthDelimitedCodec>;
+// type IOErrorStream = FramedRead<TcpStream, LengthDelimitedCodec>;
 // stream::FromErr maps underlying IO errors into Bincode errors
 // type BincodeErrStream = stream::FromErr<IOErrorStream, bincode::Error>;
 // ReadBincode maps underlying bytes into Bincode-deserializable structs
