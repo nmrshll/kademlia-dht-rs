@@ -3,7 +3,6 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-// use tokio::stream::StreamExt;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 // use tokio_serde::formats::*;
@@ -12,9 +11,11 @@ use tokio::task::JoinHandle;
 // use futures::stream::Stream;
 // use tokio::prelude::*;
 // use tokio_serde_bincode::ReadBincode;
-use tokio_util::codec::{FramedRead, LengthDelimitedCodec};
+use tokio::stream::StreamExt;
+use tokio_util::codec::{Decoder, Framed, FramedRead, LengthDelimitedCodec};
 
 // use crate::key::Key;
+use crate::req2::{MyCodec, MyCodecErr};
 use crate::rout2::{Node, RoutingTable};
 // use crate::routing::KnownNode;
 // use crate::req2::DummyData;
@@ -81,63 +82,35 @@ impl<'k> Kad2 {
         }
     }
 
-    // pub async fn handle_stream(&self, mut stream: TcpStream) -> Result<(), Box<dyn Error>> {
-    //     // Spawn our handler to be run asynchronously.
-    //     tokio::spawn(async move {
-    //         let mut buf = [0u8; 1024];
-    //         // In a loop, read data from the socket and write the data back.
-    //         loop {
-    //             match stream.read(&mut buf).await {
-    //                 Err(e) => {
-    //                     dbg!("err");
-    //                     tracing::info!("an error occurred; error = {:?}", e)
-    //                 }
-    //                 // no data back
-    //                 Ok(0) => {
-    //                     dbg!("buzz");
-    //                     return;
-    //                 }
-    //                 Ok(n) => {
-    //                     stream
-    //                         .write_all(&buf[0..n])
-    //                         .await
-    //                         .expect("failed to write data to socket");
-    //                 }
-    //             }
-    //         }
-    //     });
-    //
-    //     Ok(())
-    // }
-
-    pub async fn start(&self, bootstrap: Option<Node>) -> Result<JoinHandle<()>, Box<dyn Error>> {
+    pub async fn start(
+        &self,
+        bootstrap: Option<Node>,
+    ) -> Result<JoinHandle<Result<(), MyCodecErr>>, Box<dyn Error>> {
         let addr = &self.node_self.addr.clone();
         let mut listener = TcpListener::bind(addr).await?;
 
         // Start a server
-        let task_echo = tokio::spawn(async move {
+        let task_kad = tokio::spawn(async move {
             loop {
-                // Asynchronously wait for an inbound TcpStream.
-                match listener.accept().await {
-                    Err(e) => {
-                        tracing::warn!("failed starting listener: {:?}", e);
-                        break;
-                    }
-                    Ok((mut stream, _)) => {
-                        // process streams asynchronously
-                        tokio::spawn(async move {
-                            Self::handle_echo_stream(stream).await; // TODO err handling
-                        });
-                    }
-                }
+                let (stream, _addr) = listener.accept().await.map_err(|e: std::io::Error| {
+                    tracing::warn!("failed listener.accept(): {:?}", e);
+                    return e;
+                })?;
+                tokio::spawn(async move {
+                    Self::handle_stream(stream).await; // TODO err handling
+                });
             }
+            Ok::<_, MyCodecErr>(()) // TODO not MyCodecErr
         });
 
-        Ok(task_echo)
+        Ok(task_kad)
     }
 
     pub async fn handle_stream(mut stream: TcpStream) {
-        // use futures::Stream;
+        // create a codec per connection to parse all messages sent on that connection
+        let codec = MyCodec::new();
+        let mut framedCodecStream = codec.framed(stream); // no split ?
+
         // let length_delimited = FramedRead::new(stream, LengthDelimitedCodec::new()).into();
         // Deserialize frames
         // let delimited_stream = length_delimited::Builder::new().new_read(stream);
@@ -153,11 +126,18 @@ impl<'k> Kad2 {
         // );
 
         // Spawn a task that prints all received messages to STDOUT
-        // tokio::spawn(async move {
-        //     while let Some(msg) = deserialized.try_next().await.unwrap() {
-        //         println!("GOT: {:?}", msg);
-        //     }
-        // });
+        tokio::spawn(async move {
+            // while let Some(msg) = framedCodecStream.try_next().await.unwrap() {
+            //     println!("GOT: {:?}", msg);
+            // }
+            while let Some(res) = framedCodecStream.next().await {
+                match res {
+                    Ok(dummyData) => println!("GOT: {:?}", dummyData),
+                    Err(e) => println!("ERROR: {}", e),
+                }
+            }
+            Ok::<(), MyCodecErr>(())
+        });
     }
 
     // pub async fn node_self(&self) -> Node {

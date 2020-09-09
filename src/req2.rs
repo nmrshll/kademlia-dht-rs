@@ -63,9 +63,15 @@ impl Decoder for MyCodec {
 
         // 3. If the bytes are valid, consume all the bytes in the current frame
         // and return Ok(Some(DummyData::EventKind))
-        let v: Value = serde_json::from_reader(src.as_ref())?;
-        dbg!(&v);
-        let dd: DummyData = serde_json::from_reader(src.as_ref())?;
+        let dd: DummyData = match serde_json::from_reader(src.as_ref()) {
+            // TODO tomorrow: fork into examples repo
+            // TODO consume bytes, empty srcBuf first
+            Err(e) => {
+                src.clear();
+                return Err(e.into());
+            }
+            Ok(dd) => dd,
+        };
         dbg!(&dd);
 
         // src.split_to(next_start_index); // truncate src here too
@@ -87,9 +93,9 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum MyCodecErr {
-    #[error("MyCodec IoErr")]
+    #[error("MyCodec IoErr: {0}")]
     IoErr(#[from] io::Error),
-    #[error("MyCodec SerdeErr")]
+    #[error("MyCodec SerdeErr: {0}")]
     SerdeErr(#[from] serde_json::Error),
     #[error("unknown MyCodec error")]
     Unknown,
