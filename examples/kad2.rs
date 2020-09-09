@@ -11,7 +11,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let kad = Kad2::new().await?;
     let addr = kad.node_self.addr;
-    let task_kad = kad.start_echo().await?;
+    let task_kad = kad.start(None).await?;
     tracing::info!("server running on {}", addr);
     let _ = tokio::join!(task_kad);
 
