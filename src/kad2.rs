@@ -111,25 +111,8 @@ impl<'k> Kad2 {
         let codec = MyCodec::new();
         let mut framedCodecStream = codec.framed(stream); // no split ?
 
-        // let length_delimited = FramedRead::new(stream, LengthDelimitedCodec::new()).into();
-        // Deserialize frames
-        // let delimited_stream = length_delimited::Builder::new().new_read(stream);
-        // .from_err::<bincode::Error>();
-        // Deserialize each frame
-        // let deserialized: ReadBincode<_, DummyData> = ReadBincode::new(length_delimited);
-
-        // tokio::spawn(
-        //     deserialized
-        //         .into_inner()
-        //         .for_each(|msg: DummyData| Ok(println!("Got: {:?}", msg)))
-        //         .map_err(|_| ()),
-        // );
-
         // Spawn a task that prints all received messages to STDOUT
         tokio::spawn(async move {
-            // while let Some(msg) = framedCodecStream.try_next().await.unwrap() {
-            //     println!("GOT: {:?}", msg);
-            // }
             while let Some(res) = framedCodecStream.next().await {
                 match res {
                     Ok(dummyData) => println!("GOT: {:?}", dummyData),
