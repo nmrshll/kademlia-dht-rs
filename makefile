@@ -1,3 +1,4 @@
+.DEFAULT_GOAL=ex.kad2
 # EXAMPLES
 ex.tokio:
 	cd examples/tokio && \
