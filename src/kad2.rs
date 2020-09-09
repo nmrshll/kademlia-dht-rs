@@ -9,10 +9,9 @@ use tokio::task::JoinHandle;
 use tokio_util::codec::Decoder;
 
 // use crate::key::Key;
-use crate::req2::{MyCodec, MyCodecErr};
+use crate::proto2::{ProtocolCodec, ProtocolErr};
 use crate::rout2::{Node, RoutingTable};
 // use crate::routing::KnownNode;
-// use crate::req2::DummyData;
 
 #[derive(Clone)]
 pub struct Kad2 {
@@ -79,7 +78,7 @@ impl<'k> Kad2 {
     pub async fn start(
         &self,
         _bootstrap: Option<Node>,
-    ) -> Result<JoinHandle<Result<(), MyCodecErr>>, Box<dyn Error>> {
+    ) -> Result<JoinHandle<Result<(), ProtocolErr>>, Box<dyn Error>> {
         let addr = &self.node_self.addr.clone();
         let mut listener = TcpListener::bind(addr).await?;
 
@@ -88,8 +87,8 @@ impl<'k> Kad2 {
             loop {
                 let (stream, _addr) = listener.accept().await.map_err(|e: std::io::Error| {
                     tracing::warn!("failed listener.accept(): {:?}", e);
-                    return MyCodecErr::from(e); // TODO not MyCodecErr
-                })?; // returns Result<_, MyCodecErr>
+                    return ProtocolErr::from(e); // TODO not ProtocolErr
+                })?; // returns Result<_, ProtocolErr>
                 tokio::spawn(async move {
                     Self::handle_stream(stream).await; // TODO err handling
                 });
@@ -101,18 +100,18 @@ impl<'k> Kad2 {
 
     pub async fn handle_stream(stream: TcpStream) {
         // create a codec per connection to parse all messages sent on that connection
-        let codec = MyCodec::new();
+        let codec = ProtocolCodec::new();
         let mut framed_codec_stream = codec.framed(stream); // no split ?
 
         // Spawn a task that prints all received messages to STDOUT
         tokio::spawn(async move {
             while let Some(res) = framed_codec_stream.next().await {
                 match res {
-                    Ok(dd) => println!("GOT: {:?}", dd),
+                    Ok(req) => println!("GOT: {:?}", req),
                     Err(e) => println!("ERROR: {}", e),
                 }
             }
-            Ok::<(), MyCodecErr>(())
+            Ok::<(), ProtocolErr>(())
         });
     }
 

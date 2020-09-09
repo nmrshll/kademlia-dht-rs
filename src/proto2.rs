@@ -3,19 +3,18 @@ use crate::rout2::KnownNode;
 
 pub const A_CONCURRENT_REQUESTS: usize = 3;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+// #[serde(tag = "type")]
 pub enum Request {
     Ping,
     Store(String, String),
     FindNode(Key),
     FindValue(String),
 }
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum FindValueResp {
-    Nodes(Vec<KnownNode>),
-    Value(String),
-}
+// pub struct StoreReq {
+//     Key: String,
+//     Value: String,
+// }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Reply {
@@ -23,26 +22,31 @@ pub enum Reply {
     FindNode(Vec<KnownNode>),
     FindValue(FindValueResp),
 }
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum FindValueResp {
+    Nodes(Vec<KnownNode>),
+    Value(String),
+}
 
 ///////////////////
 // TOKIO SERDE USING TOKIO CODECS
 /////////////////
 
-// TODO rm
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct DummyData {
-    field: i32,
-    // pub hello: String,
-}
+// // TODO rm
+// #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+// pub struct DummyData {
+//     field: i32,
+//     // pub hello: String,
+// }
 
 use bytes::{BufMut, BytesMut};
 use std::io;
 use tokio_util::codec::{Decoder, Encoder};
 
-pub struct MyCodec;
-impl Decoder for MyCodec {
-    type Item = DummyData; // (1)
-    type Error = MyCodecErr; // (2)
+pub struct ProtocolCodec;
+impl Decoder for ProtocolCodec {
+    type Item = Request;
+    type Error = ProtocolErr;
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         // 1. If the stream hasn't provided enough bytes yet, or is empty,
         // the decoder should return Ok(None) to stop parsing frames
@@ -52,26 +56,26 @@ impl Decoder for MyCodec {
         }
 
         // 2. If the frame is invalid,
-        // consume all of the error bytes and return Err(MyCodecErr::ErrorKind) to report an Error frame to the consumer
+        // consume all of the error bytes and return Err(ProtocolErr::ErrorKind) to report an Error frame to the consumer
         // if invalid {
         //     // src should be truncated to [next_start_index,len)
         //     src.split_to(next_start_index);
-        //     return Err(MyCodecErr::NoImpl);
+        //     return Err(ProtocolErr::NoImpl);
         // }
 
         // 3. If the bytes are valid, consume all bytes in the current frame into new BytesMut
-        // and return Ok(Some(DummyData))
+        // and return Ok(Some(Request))
         let src_cp = src.split(); // empties src
-        let dd: DummyData = serde_json::from_reader(src_cp.as_ref())?;
+        let req: Request = serde_json::from_reader(src_cp.as_ref())?;
 
-        return Ok(Some(dd));
+        return Ok(Some(req));
     }
 }
 
-impl Encoder<DummyData> for MyCodec {
-    type Error = MyCodecErr;
+impl Encoder<Request> for ProtocolCodec {
+    type Error = ProtocolErr;
 
-    fn encode(&mut self, _data: DummyData, dest: &mut BytesMut) -> Result<(), MyCodecErr> {
+    fn encode(&mut self, _data: Request, dest: &mut BytesMut) -> Result<(), ProtocolErr> {
         dest.put_uint(1u64, 64); // TODO replace this with real encoding
         Ok(())
     }
@@ -80,37 +84,37 @@ impl Encoder<DummyData> for MyCodec {
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum MyCodecErr {
-    #[error("MyCodec IoErr: {0}")]
+pub enum ProtocolErr {
+    #[error("ProtocolCodec IoErr: {0}")]
     IoErr(#[from] io::Error),
-    #[error("MyCodec SerdeErr: {0}")]
+    #[error("ProtocolCodec SerdeErr: {0}")]
     SerdeErr(#[from] serde_json::Error),
-    #[error("unknown MyCodec error")]
+    #[error("unknown ProtocolCodec error")]
     Unknown,
 }
-impl PartialEq for MyCodecErr {
+impl PartialEq for ProtocolErr {
     fn eq(&self, other: &Self) -> bool {
         use std::error::Error;
         match (&self, &other) {
-            (MyCodecErr::IoErr(a), MyCodecErr::IoErr(b)) => a.kind() == b.kind(),
-            (MyCodecErr::SerdeErr(a), MyCodecErr::SerdeErr(b)) => {
+            (ProtocolErr::IoErr(a), ProtocolErr::IoErr(b)) => a.kind() == b.kind(),
+            (ProtocolErr::SerdeErr(a), ProtocolErr::SerdeErr(b)) => {
                 a.description() == b.description()
             }
-            (MyCodecErr::Unknown, MyCodecErr::Unknown) => false,
+            (ProtocolErr::Unknown, ProtocolErr::Unknown) => false,
             _ => false,
         }
     }
 }
 
-// pub type MyCodecConnection = Framed<TcpStream, MyCodec>; // (1)
+// pub type ProtocolCodecConnection = Framed<TcpStream, ProtocolCodec>; // (1)
 
-impl MyCodec {
+impl ProtocolCodec {
     pub fn new() -> Self {
-        MyCodec {}
+        ProtocolCodec {}
     }
-    // pub async fn connect(addr: &SocketAddr) -> Result<MyCodecConnection, io::Error> {
+    // pub async fn connect(addr: &SocketAddr) -> Result<ProtocolCodecConnection, io::Error> {
     //     let tcp_stream = TcpStream::connect(addr).await?;
-    //     Ok(MyCodec.framed(tcp_stream)) // (2)
+    //     Ok(ProtocolCodec.framed(tcp_stream)) // (2)
     // }
 }
 
@@ -125,17 +129,19 @@ mod tests {
     }
 
     // To test a decoder, iterate over the output of each function call
-    // and push the results to a Vec<Result<Option<DummyData>, MyCodecErr>>.
+    // and push the results to a Vec<Result<Option<Request>, ProtocolErr>>.
     // Here a custom consume function I wrote to test the output of my decoder.
-    fn consume(codec: &mut MyCodec, bytes: &mut BytesMut) -> Vec<Result<DummyData, MyCodecErr>> {
+    fn consume(
+        codec: &mut ProtocolCodec,
+        bytes: &mut BytesMut,
+    ) -> Vec<Result<Request, ProtocolErr>> {
         let mut result = Vec::new();
         loop {
             match codec.decode(bytes) {
                 Ok(None) => {
                     break;
                 }
-                // output is Ok(some) or Err
-                Ok(Some(dd)) => result.push(Ok(dd)),
+                Ok(Some(req)) => result.push(Ok(req)),
                 Err(e) => result.push(Err(e)),
             }
         }
@@ -145,13 +151,13 @@ mod tests {
     #[test]
     fn finished_message() {
         // This test validates that the codec converts the byte input
-        // into DummyDatas correctly.
+        // into Requests correctly.
         // First, instantiate the codec.
-        let mut codec = MyCodec::new();
+        let mut codec = ProtocolCodec::new();
         // Then create a BytesMut buffer from some bytes to be decoded.
-        let mut bytes = BytesMut::from(b"{\"field\":3}".as_ref());
-        // Finally consume the input bytes, and compare the frames that
-        // that the decode function returns.
+        let mut bytes = BytesMut::from(b"{\"field\":3}".as_ref()); // TOMORROW FIX TEST
+                                                                   // Finally consume the input bytes, and compare the frames that
+                                                                   // that the decode function returns.
         let res_vec = consume(&mut codec, &mut bytes);
 
         // the bytes should be completely consumed, so `bytes.len()`
@@ -161,19 +167,20 @@ mod tests {
         // Since we sent a message to the decoder that ends in "\r\n",
         // it should return a single telnet frame in the form of a
         // message event that contains the expected String value.
-        let first_res: &Result<DummyData, MyCodecErr> = res_vec.first().unwrap();
-        assert_eq!(*first_res, Ok(DummyData { field: 3 }));
+        let first_res: &Result<Request, ProtocolErr> = res_vec.first().unwrap();
+        // assert_eq!(*first_res, Ok(DummyData { field: 3 }));
+        assert_eq!(*first_res, Ok(Request::Ping));
     }
 
     // #[test]
     // fn message_encode() {
-    //     // The encoder is responsible for turning DummyDatas into
+    //     // The encoder is responsible for turning Requests into
     //     // byte frames. First, create the codec.
-    //     let mut codec = MyCodec::new(4096);
+    //     let mut codec = ProtocolCodec::new(4096);
     //     // Next, create a buffer to be written to.
     //     let mut output = BytesMut::new();
     //     // Finally, create the message event and encode the result.
-    //     let message = DummyData::Message(String::from("Hello world!\r\n"));
+    //     let message = Request::Message(String::from("Hello world!\r\n"));
 
     //     // encode the message and read the output
     //     codec.encode(message, &mut output).expect("Invalid encoding sequence");
