@@ -39,7 +39,7 @@ pub enum FindValueResp {
 //     // pub hello: String,
 // }
 
-use bytes::{BufMut, BytesMut};
+use bytes::{buf::ext::BufMutExt, BytesMut};
 use std::io;
 use tokio_util::codec::{Decoder, Encoder};
 
@@ -75,8 +75,9 @@ impl Decoder for ProtocolCodec {
 impl Encoder<Request> for ProtocolCodec {
     type Error = ProtocolErr;
 
-    fn encode(&mut self, _data: Request, dest: &mut BytesMut) -> Result<(), ProtocolErr> {
-        dest.put_uint(1u64, 64); // TODO replace this with real encoding
+    fn encode(&mut self, req: Request, dest: &mut BytesMut) -> Result<(), ProtocolErr> {
+        // dest.put_uint(1u64, 64); // TODO replace this with real encoding
+        serde_json::to_writer(dest.writer(), &req)?;
         Ok(())
     }
 }
@@ -122,6 +123,7 @@ impl ProtocolCodec {
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
+    use bytes::Bytes;
 
     #[test]
     fn test_add() {
@@ -149,49 +151,46 @@ mod tests {
     }
 
     #[test]
-    fn finished_message() {
+    fn msg_decode() {
         // This test validates that the codec converts the byte input
         // into Requests correctly.
         // First, instantiate the codec.
         let mut codec = ProtocolCodec::new();
         // Then create a BytesMut buffer from some bytes to be decoded.
-        let mut bytes = BytesMut::from(b"{\"field\":3}".as_ref()); // TOMORROW FIX TEST
-                                                                   // Finally consume the input bytes, and compare the frames that
-                                                                   // that the decode function returns.
+        let mut bytes = BytesMut::from(b"\"Ping\"".as_ref());
+
+        // Finally consume the input bytes, and compare the frames that
+        // that the decode function returns.
         let res_vec = consume(&mut codec, &mut bytes);
 
         // the bytes should be completely consumed, so `bytes.len()`
         // should be 0
         assert_eq!(bytes.len(), 0_usize);
 
-        // Since we sent a message to the decoder that ends in "\r\n",
-        // it should return a single telnet frame in the form of a
-        // message event that contains the expected String value.
+        // Since we sent a message to the decoder that ends in "\r\n", // not valid anymore
+        // it should return a single Request frame in the form of a
+        // message event that contains the expected value.
         let first_res: &Result<Request, ProtocolErr> = res_vec.first().unwrap();
-        // assert_eq!(*first_res, Ok(DummyData { field: 3 }));
         assert_eq!(*first_res, Ok(Request::Ping));
     }
 
-    // #[test]
-    // fn message_encode() {
-    //     // The encoder is responsible for turning Requests into
-    //     // byte frames. First, create the codec.
-    //     let mut codec = ProtocolCodec::new(4096);
-    //     // Next, create a buffer to be written to.
-    //     let mut output = BytesMut::new();
-    //     // Finally, create the message event and encode the result.
-    //     let message = Request::Message(String::from("Hello world!\r\n"));
+    #[test]
+    fn msg_encode() {
+        // The encoder is responsible for turning a message (Request) into byte frames
+        let mut codec = ProtocolCodec::new();
+        let msg = Request::Ping;
 
-    //     // encode the message and read the output
-    //     codec.encode(message, &mut output).expect("Invalid encoding sequence");
+        // Create a buffer to encode the message to
+        let mut output = BytesMut::new();
+        codec
+            .encode(msg, &mut output)
+            .expect("Invalid encoding sequence");
 
-    //     // utf8 output
-    //     assert_eq!(
-    //         output,
-    //         // The output should have the following bytes in the buffer
-    //         BytesMut::from(vec![
-    //             0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x77, 0x6f, 0x72, 0x6c, 0x64, 0x21, 0x0d, 0x0a,
-    //         ]),
-    //     );
-    // }
+        // utf8 output
+        assert_eq!(
+            output,
+            // The output should have the following bytes in the buffer
+            Bytes::from(b"\"Ping\"".as_ref()),
+        );
+    }
 }
