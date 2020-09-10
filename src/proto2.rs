@@ -152,11 +152,8 @@ mod tests {
 
     #[test]
     fn msg_decode() {
-        // This test validates that the codec converts the byte input
-        // into Requests correctly.
-        // First, instantiate the codec.
+        // Instantiate a Codec, and Bytes to be decoded into Request correctly
         let mut codec = ProtocolCodec::new();
-        // Then create a BytesMut buffer from some bytes to be decoded.
         let mut bytes = BytesMut::from(b"\"Ping\"".as_ref());
 
         // Finally consume the input bytes, and compare the frames that
