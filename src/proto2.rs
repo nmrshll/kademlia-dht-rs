@@ -21,6 +21,7 @@ pub enum Reply {
     Ping,
     FindNode(Vec<KnownNode>),
     FindValue(FindValueResp),
+    Err(ProtoErr),
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum FindValueResp {
@@ -44,9 +45,19 @@ use std::io;
 use tokio_util::codec::{Decoder, Encoder};
 
 pub struct ProtocolCodec;
+// pub type ProtocolCodecConnection = Framed<TcpStream, ProtocolCodec>; // (1)
+impl ProtocolCodec {
+    pub fn new() -> Self {
+        ProtocolCodec {}
+    }
+    // pub async fn connect(addr: &SocketAddr) -> Result<ProtocolCodecConnection, io::Error> {
+    //     let tcp_stream = TcpStream::connect(addr).await?;
+    //     Ok(ProtocolCodec.framed(tcp_stream)) // (2)
+    // }
+}
 impl Decoder for ProtocolCodec {
     type Item = Request;
-    type Error = ProtocolErr;
+    type Error = CodecErr;
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         // 1. If the stream hasn't provided enough bytes yet, or is empty,
         // the decoder should return Ok(None) to stop parsing frames
@@ -56,11 +67,11 @@ impl Decoder for ProtocolCodec {
         }
 
         // 2. If the frame is invalid,
-        // consume all of the error bytes and return Err(ProtocolErr::ErrorKind) to report an Error frame to the consumer
+        // consume all of the error bytes and return Err(CodecErr::ErrorKind) to report an Error frame to the consumer
         // if invalid {
         //     // src should be truncated to [next_start_index,len)
         //     src.split_to(next_start_index);
-        //     return Err(ProtocolErr::NoImpl);
+        //     return Err(CodecErr::NoImpl);
         // }
 
         // 3. If the bytes are valid, consume all bytes in the current frame into new BytesMut
@@ -71,21 +82,23 @@ impl Decoder for ProtocolCodec {
         return Ok(Some(req));
     }
 }
-
 impl Encoder<Request> for ProtocolCodec {
-    type Error = ProtocolErr;
+    type Error = CodecErr;
 
-    fn encode(&mut self, req: Request, dest: &mut BytesMut) -> Result<(), ProtocolErr> {
-        // dest.put_uint(1u64, 64); // TODO replace this with real encoding
+    fn encode(&mut self, req: Request, dest: &mut BytesMut) -> Result<(), CodecErr> {
         serde_json::to_writer(dest.writer(), &req)?;
         Ok(())
     }
 }
 
+//////////////////////
+// ERRORS
+///////////////
+
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum ProtocolErr {
+pub enum CodecErr {
     #[error("ProtocolCodec IoErr: {0}")]
     IoErr(#[from] io::Error),
     #[error("ProtocolCodec SerdeErr: {0}")]
@@ -93,35 +106,26 @@ pub enum ProtocolErr {
     #[error("unknown ProtocolCodec error")]
     Unknown,
 }
-impl PartialEq for ProtocolErr {
+impl PartialEq for CodecErr {
     fn eq(&self, other: &Self) -> bool {
         use std::error::Error;
         match (&self, &other) {
-            (ProtocolErr::IoErr(a), ProtocolErr::IoErr(b)) => a.kind() == b.kind(),
-            (ProtocolErr::SerdeErr(a), ProtocolErr::SerdeErr(b)) => {
-                a.description() == b.description()
-            }
-            (ProtocolErr::Unknown, ProtocolErr::Unknown) => false,
+            (CodecErr::IoErr(a), CodecErr::IoErr(b)) => a.kind() == b.kind(),
+            (CodecErr::SerdeErr(a), CodecErr::SerdeErr(b)) => a.description() == b.description(),
+            (CodecErr::Unknown, CodecErr::Unknown) => false,
             _ => false,
         }
     }
 }
 
-// pub type ProtocolCodecConnection = Framed<TcpStream, ProtocolCodec>; // (1)
-
-impl ProtocolCodec {
-    pub fn new() -> Self {
-        ProtocolCodec {}
-    }
-    // pub async fn connect(addr: &SocketAddr) -> Result<ProtocolCodecConnection, io::Error> {
-    //     let tcp_stream = TcpStream::connect(addr).await?;
-    //     Ok(ProtocolCodec.framed(tcp_stream)) // (2)
-    // }
+#[derive(Error, Debug, Clone, Serialize, Deserialize)]
+pub enum ProtoErr {
+    #[error("unknown Protocol error")]
+    Unknown,
 }
 
 #[cfg(test)]
 mod tests {
-    // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
     use bytes::Bytes;
 
@@ -131,12 +135,9 @@ mod tests {
     }
 
     // To test a decoder, iterate over the output of each function call
-    // and push the results to a Vec<Result<Option<Request>, ProtocolErr>>.
+    // and push the results to a Vec<Result<Option<Request>, CodecErr>>.
     // Here a custom consume function I wrote to test the output of my decoder.
-    fn consume(
-        codec: &mut ProtocolCodec,
-        bytes: &mut BytesMut,
-    ) -> Vec<Result<Request, ProtocolErr>> {
+    fn consume(codec: &mut ProtocolCodec, bytes: &mut BytesMut) -> Vec<Result<Request, CodecErr>> {
         let mut result = Vec::new();
         loop {
             match codec.decode(bytes) {
@@ -167,7 +168,7 @@ mod tests {
         // Since we sent a message to the decoder that ends in "\r\n", // not valid anymore
         // it should return a single Request frame in the form of a
         // message event that contains the expected value.
-        let first_res: &Result<Request, ProtocolErr> = res_vec.first().unwrap();
+        let first_res: &Result<Request, CodecErr> = res_vec.first().unwrap();
         assert_eq!(*first_res, Ok(Request::Ping));
     }
 
@@ -191,3 +192,11 @@ mod tests {
         );
     }
 }
+
+// TOKIO CODEC BINCODE
+// FramedRead upgrades TcpStream from an AsyncRead to a Stream
+// type IOErrorStream = FramedRead<TcpStream, LengthDelimitedCodec>;
+// stream::FromErr maps underlying IO errors into Bincode errors
+// type BincodeErrStream = stream::FromErr<IOErrorStream, bincode::Error>;
+// ReadBincode maps underlying bytes into Bincode-deserializable structs
+// type BincodeStream = ReadBincode<BincodeErrStream, DummyData>;

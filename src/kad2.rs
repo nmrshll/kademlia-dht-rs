@@ -1,4 +1,7 @@
+// use futures::stream::FuturesUnordered;
+use futures::future;
 use std::error::Error;
+use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -9,8 +12,9 @@ use tokio::task::JoinHandle;
 use tokio_util::codec::Decoder;
 
 // use crate::key::Key;
-use crate::proto2::{ProtocolCodec, ProtocolErr};
+use crate::proto2::{CodecErr, ProtoErr, ProtocolCodec, Reply, Request};
 use crate::rout2::{Node, RoutingTable};
+use crate::State;
 // use crate::routing::KnownNode;
 
 #[derive(Clone)]
@@ -31,7 +35,91 @@ impl<'k> Kad2 {
             node_self,
         })
     }
+    pub async fn start(&self, _bootstrap: Option<Node>) -> Result<KadHandle, io::Error> {
+        let addr = &self.node_self.addr.clone();
+        let mut listener = TcpListener::bind(addr).await?;
 
+        // Start the state manager task
+        let (task_state, cmd_chan) = State::new().start().split();
+
+        // Start a server
+        let task_kad_server = tokio::spawn(async move {
+            loop {
+                let (stream, _addr) = listener.accept().await.map_err(|e: io::Error| {
+                    tracing::warn!("failed listener.accept(): {:?}", e);
+                    return CodecErr::from(e); // TODO not CodecErr
+                })?; // returns Result<_, CodecErr>
+                tokio::spawn(async move {
+                    Self::handle_stream(stream).await; // TODO err handling
+                });
+            }
+        });
+
+        Ok(future::join(task_state, task_kad_server))
+    }
+
+    pub async fn handle_stream(stream: TcpStream) {
+        // create a codec per connection to parse all messages sent on that connection
+        let codec = ProtocolCodec::new();
+        let mut framed_codec_stream = codec.framed(stream); // no split ?
+
+        // TODO is this spawn needed ?
+        while let Some(res) = framed_codec_stream.next().await {
+            match res {
+                Ok(req) => {
+                    let resp = Self::process(req);
+                    //  MONDAY TODO respond on the stream
+                }
+                Err(e) => println!("ERROR: {}", e),
+            }
+        }
+    }
+
+    pub fn process(req: Request) -> Reply {
+        println!("GOT: {:?}", &req);
+        // TODO update routes without lock
+        match req {
+            Request::Ping => Reply::Ping,
+            Request::Store(_k, _v) => {
+                // TODO store value
+                Reply::Ping
+            }
+            Request::FindNode(_id) => {
+                // TODO find colsest nodes in routes
+                Reply::FindNode(vec![])
+            }
+            Request::FindValue(_k) => {
+                // TODO hash key
+                // TODO lookup hash in store
+                // TODO return value if found, FindValueResult::Nodes with closest nodes if not found
+                Reply::Ping
+            }
+            // TODO for error management return a reply with an error if error
+            _ => Reply::Err(ProtoErr::Unknown), // TODO above in match arms
+        }
+    }
+
+    // pub async fn node_self(&self) -> Node {
+    //     self.routes.lock().await.node_self.clone() // TODO rm mutex, give back &'k node_self
+    // }
+}
+
+type KadHandle = futures::future::Join<JoinHandle<()>, JoinHandle<Result<(), CodecErr>>>;
+
+// use thiserror::Error;
+
+// #[derive(Error, Debug)]
+// pub enum KadErr {
+//     #[error("unknown Request")]
+//     UnknownRequest,
+//     #[error("unknown ProtocolCodec error")]
+//     Unknown,
+// }
+
+struct Echoer {
+    pub node_self: Node,
+}
+impl Echoer {
     pub async fn start_echo(self) -> Result<JoinHandle<()>, Box<dyn Error>> {
         let addr = &self.node_self.addr.clone();
         let mut listener = TcpListener::bind(addr).await?;
@@ -53,10 +141,8 @@ impl<'k> Kad2 {
                 }
             }
         });
-
         Ok(task_echo)
     }
-
     pub async fn handle_echo_stream(mut stream: TcpStream) {
         let mut buf = [0u8; 1024];
         // In a loop, read data from the socket and write the data back.
@@ -74,56 +160,4 @@ impl<'k> Kad2 {
             }
         }
     }
-
-    pub async fn start(
-        &self,
-        _bootstrap: Option<Node>,
-    ) -> Result<JoinHandle<Result<(), ProtocolErr>>, Box<dyn Error>> {
-        let addr = &self.node_self.addr.clone();
-        let mut listener = TcpListener::bind(addr).await?;
-
-        // Start a server
-        let task_kad = tokio::spawn(async move {
-            loop {
-                let (stream, _addr) = listener.accept().await.map_err(|e: std::io::Error| {
-                    tracing::warn!("failed listener.accept(): {:?}", e);
-                    return ProtocolErr::from(e); // TODO not ProtocolErr
-                })?; // returns Result<_, ProtocolErr>
-                tokio::spawn(async move {
-                    Self::handle_stream(stream).await; // TODO err handling
-                });
-            }
-        });
-
-        Ok(task_kad)
-    }
-
-    pub async fn handle_stream(stream: TcpStream) {
-        // create a codec per connection to parse all messages sent on that connection
-        let codec = ProtocolCodec::new();
-        let mut framed_codec_stream = codec.framed(stream); // no split ?
-
-        // Spawn a task that prints all received messages to STDOUT
-        tokio::spawn(async move {
-            while let Some(res) = framed_codec_stream.next().await {
-                match res {
-                    Ok(req) => println!("GOT: {:?}", req),
-                    Err(e) => println!("ERROR: {}", e),
-                }
-            }
-            Ok::<(), ProtocolErr>(())
-        });
-    }
-
-    // pub async fn node_self(&self) -> Node {
-    //     self.routes.lock().await.node_self.clone() // TODO rm mutex, give back &'k node_self
-    // }
 }
-
-// TOKIO CODEC BINCODE
-// FramedRead upgrades TcpStream from an AsyncRead to a Stream
-// type IOErrorStream = FramedRead<TcpStream, LengthDelimitedCodec>;
-// stream::FromErr maps underlying IO errors into Bincode errors
-// type BincodeErrStream = stream::FromErr<IOErrorStream, bincode::Error>;
-// ReadBincode maps underlying bytes into Bincode-deserializable structs
-// type BincodeStream = ReadBincode<BincodeErrStream, DummyData>;
