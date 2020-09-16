@@ -15,4 +15,4 @@ pub use self::kademlia::*;
 pub use key::*;
 pub use networking::*;
 pub use routing::*;
-pub use state2::{Command as StateCmd, State};
+pub use state2::State;

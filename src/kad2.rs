@@ -14,11 +14,15 @@ use tokio_util::codec::Decoder;
 // use crate::key::Key;
 use crate::proto2::{CodecErr, ProtoErr, ProtocolCodec, Reply, Request};
 use crate::rout2::{Node, RoutingTable};
-use crate::State;
+use crate::state2::{CmdChans, State};
 // use crate::routing::KnownNode;
+
+// TODO separate Rust API (put,get) and RPC api
 
 #[derive(Clone)]
 pub struct Kad2 {
+    // TODO make Kad own only refs/handles and be Copy,
+    // then we can use self on methods inside tasks ?
     routes: Arc<Mutex<RoutingTable>>, // replace with interior mut Sync handle
     // store: Arc<Mutex<HashMap<String, String>>>,
     pub node_self: Node,
@@ -35,12 +39,12 @@ impl<'k> Kad2 {
             node_self,
         })
     }
-    pub async fn start(&self, _bootstrap: Option<Node>) -> Result<KadHandle, io::Error> {
+    pub async fn start(self, _bootstrap: Option<Node>) -> Result<KadHandle, io::Error> {
         let addr = &self.node_self.addr.clone();
         let mut listener = TcpListener::bind(addr).await?;
 
         // Start the state manager task
-        let (task_state, cmd_chan) = State::new().start().split();
+        let (tasks_state, state_client) = State::start(self.node_self);
 
         // Start a server
         let task_kad_server = tokio::spawn(async move {
@@ -49,16 +53,19 @@ impl<'k> Kad2 {
                     tracing::warn!("failed listener.accept(): {:?}", e);
                     return CodecErr::from(e); // TODO not CodecErr
                 })?; // returns Result<_, CodecErr>
+
+                let state_client = state_client.clone();
                 tokio::spawn(async move {
-                    Self::handle_stream(stream).await; // TODO err handling
+                    Self::handle_stream(stream, state_client).await; // TODO err handling
                 });
             }
         });
 
-        Ok(future::join(task_state, task_kad_server))
+        let fut = future::join3(task_kad_server, tasks_state.kv, tasks_state.router);
+        Ok(fut)
     }
 
-    pub async fn handle_stream(stream: TcpStream) {
+    pub async fn handle_stream(stream: TcpStream, state_client: CmdChans) {
         // create a codec per connection to parse all messages sent on that connection
         let codec = ProtocolCodec::new();
         let mut framed_codec_stream = codec.framed(stream); // no split ?
@@ -67,7 +74,7 @@ impl<'k> Kad2 {
         while let Some(res) = framed_codec_stream.next().await {
             match res {
                 Ok(req) => {
-                    let resp = Self::process(req);
+                    let resp = Self::process(req, state_client.clone());
                     //  MONDAY TODO respond on the stream
                 }
                 Err(e) => println!("ERROR: {}", e),
@@ -75,7 +82,7 @@ impl<'k> Kad2 {
         }
     }
 
-    pub fn process(req: Request) -> Reply {
+    pub fn process(req: Request, state_client: CmdChans) -> Reply {
         println!("GOT: {:?}", &req);
         // TODO update routes without lock
         match req {
@@ -104,7 +111,8 @@ impl<'k> Kad2 {
     // }
 }
 
-type KadHandle = futures::future::Join<JoinHandle<()>, JoinHandle<Result<(), CodecErr>>>;
+type KadHandle =
+    futures::future::Join3<JoinHandle<Result<(), CodecErr>>, JoinHandle<()>, JoinHandle<()>>;
 
 // use thiserror::Error;
 
