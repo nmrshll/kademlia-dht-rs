@@ -49,7 +49,7 @@ impl State {
                         let _ = resp.send(Ok(res)); // TODO error handling
                     }
                     KvCmd::Set { key, val, resp } => {
-                        let res = kv.insert(key, val);
+                        let _res = kv.insert(key, val);
                         // Ignore errors
                         let _ = resp.send(Ok(())); // TODO error handling
                     }
