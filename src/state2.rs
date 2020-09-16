@@ -31,17 +31,8 @@ pub enum RouterCmd {
     // TODO maybe more ?
 }
 
-pub struct State {
-    // kv: HashMap<String, String>,
-// router: RoutingTable,
-}
+pub struct State {}
 impl State {
-    // pub fn new(node_self: Node) -> Self {
-    //     State {
-    //         kv: HashMap::new(),
-    //         router: RoutingTable::new(&node_self),
-    //     }
-    // }
     pub fn start(node_self: Node) -> (StateTasks, CmdChans) {
         // Create new state
         let mut kv: HashMap<String, String> = HashMap::new();
@@ -99,27 +90,10 @@ pub struct StateTasks {
 //     kv: mpsc::Sender<KvCmd>,
 // }
 
-// TODO re-group into structs since rust does auto-splitting into distinct tasks
-// after all no it doesn't. need to clone before spawn but that's fine
-pub type KvTask = JoinHandle<()>;
 pub type KvCmdChan = mpsc::Sender<KvCmd>;
-pub type RouterTask = JoinHandle<()>;
 pub type RouterCmdChan = mpsc::Sender<RouterCmd>;
 
-// pub type StateTasks = (KvTask, RouterTask);
 pub type CmdChans = (KvCmdChan, RouterCmdChan);
-// pub type StateTask = JoinHandle<()>;
-// pub type KvCmdChan = mpsc::Sender<KvCmd>;
-
-// pub struct StateHandle {
-//     task: JoinHandle<()>,
-//     cmd_chan: mpsc::Sender<Command>,
-// }
-// impl StateHandle {
-//     pub fn split(self) -> (JoinHandle<()>, mpsc::Sender<Command>) {
-//         return (self.task, self.cmd_chan);
-//     }
-// }
 
 use thiserror::Error;
 #[derive(Error, Debug, Clone, Serialize, Deserialize)]
