@@ -4,7 +4,7 @@ use std::error::Error;
 use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+// use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::stream::StreamExt;
 use tokio::sync::Mutex;
@@ -74,7 +74,7 @@ impl<'k> Kad2 {
         while let Some(res) = framed_codec_stream.next().await {
             match res {
                 Ok(req) => {
-                    let resp = Self::process(req, state_client.clone());
+                    let _resp = Self::process(req, state_client.clone());
                     //  MONDAY TODO respond on the stream
                 }
                 Err(e) => println!("ERROR: {}", e),
@@ -83,16 +83,18 @@ impl<'k> Kad2 {
     }
 
     pub fn process(req: Request, state_client: CmdChans) -> Reply {
+        // TODO request needs to contain src Node
+        // TODO update routes with src Node
         println!("GOT: {:?}", &req);
-        // TODO update routes without lock
         match req {
             Request::Ping => Reply::Ping,
             Request::Store(_k, _v) => {
                 // TODO store value
+                // state_client.kv
                 Reply::Ping
             }
             Request::FindNode(_id) => {
-                // TODO find colsest nodes in routes
+                // TODO find closest nodes in routes
                 Reply::FindNode(vec![])
             }
             Request::FindValue(_k) => {

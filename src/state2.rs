@@ -31,6 +31,11 @@ pub enum RouterCmd {
     // TODO maybe more ?
 }
 
+#[derive(Copy, Clone)]
+pub struct Example {
+    field: i32,
+}
+
 pub struct State {}
 impl State {
     pub fn start(node_self: Node) -> (StateTasks, CmdChans) {
@@ -94,6 +99,58 @@ pub type KvCmdChan = mpsc::Sender<KvCmd>;
 pub type RouterCmdChan = mpsc::Sender<RouterCmd>;
 
 pub type CmdChans = (KvCmdChan, RouterCmdChan);
+
+#[derive(Clone)]
+pub struct KvStateMan {
+    tx: mpsc::Sender<KvCmd>,
+}
+impl KvStateMan {
+    pub fn start() -> (Self, JoinHandle<()>) {
+        // Create state and channel to send commands to the kv manager task
+        let mut kv: HashMap<String, String> = HashMap::new();
+        let (tx_kv, mut rx) = mpsc::channel(32);
+
+        let task_kv = tokio::spawn(async move {
+            while let Some(cmd) = rx.recv().await {
+                match cmd {
+                    KvCmd::Get { key, resp } => {
+                        let res = kv.get(&key).cloned();
+                        // Ignore errors
+                        let _ = resp.send(Ok(res)); // TODO error handling
+                    }
+                    KvCmd::Set { key, val, resp } => {
+                        let _res = kv.insert(key, val);
+                        // Ignore errors
+                        let _ = resp.send(Ok(())); // TODO error handling
+                    }
+                }
+            }
+        });
+        (KvStateMan { tx: tx_kv }, task_kv)
+    }
+
+    // We'll have to pass a clone of self to be consumed by the async functions
+    pub async fn get(mut self, key: String) -> Result<Option<String>, StateErr> {
+        let (resp_tx, resp_rx) = oneshot::channel();
+        let cmd = KvCmd::Get { key, resp: resp_tx };
+        // Send the get request
+        self.tx.send(cmd).await.unwrap();
+        // await response
+        let res: Option<String> = resp_rx.await.unwrap(/*RecvError*/).unwrap(); // TODO err handling
+        println!("GOT = {:?}", res);
+        Ok(res)
+    }
+    pub async fn set(mut self, key: String, val: String) -> Result<(), StateErr> {
+        let (resp, resp_rx) = oneshot::channel();
+        let cmd = KvCmd::Set { key, val, resp };
+        // Send the SET request
+        self.tx.send(cmd).await.unwrap();
+        // Await the response
+        let res: Result<(), StateErr> = resp_rx.await.unwrap(/*RecvError*/); // TODO err handling
+        println!("GOT = {:?}", res);
+        Ok(())
+    }
+}
 
 use thiserror::Error;
 #[derive(Error, Debug, Clone, Serialize, Deserialize)]
