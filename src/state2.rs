@@ -113,7 +113,10 @@ impl KvStateMan {
 /// A command for the router task
 #[derive(Debug)]
 pub enum RouterCmd {
-    GetClosestNodes { resp: Responder<Vec<KnownNode>> },
+    GetClosestNodes {
+        key: Key,
+        resp: Responder<Vec<KnownNode>>,
+    },
     Update,
     Remove,
     // TODO maybe more ?
@@ -131,8 +134,8 @@ impl RouterStateMan {
         let task_router = tokio::spawn(async move {
             while let Some(cmd) = rx.recv().await {
                 match cmd {
-                    RouterCmd::GetClosestNodes { resp } => {
-                        let res = router.closest_nodes(Key::random(), 3); // TODO not random
+                    RouterCmd::GetClosestNodes { key, resp } => {
+                        let res = router.closest_nodes(key, 3); // TODO not random
 
                         // Ignore errors
                         let _ = resp.send(Ok(res)); // TODO error handling
@@ -145,9 +148,9 @@ impl RouterStateMan {
     }
 
     // TODO implement requests
-    pub async fn closest_nodes(mut self) -> Result<Vec<KnownNode>, StateErr> {
+    pub async fn closest_nodes(mut self, key: Key) -> Result<Vec<KnownNode>, StateErr> {
         let (resp, resp_rx) = oneshot::channel();
-        let cmd = RouterCmd::GetClosestNodes { resp };
+        let cmd = RouterCmd::GetClosestNodes { key, resp };
         // Send the SET request
         self.tx.send(cmd).await.unwrap();
         // Await the response

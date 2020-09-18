@@ -13,9 +13,8 @@ use tokio_util::codec::Decoder;
 
 // use crate::key::Key;
 use crate::proto2::{CodecErr, ProtoErr, ProtocolCodec, Reply, Request};
-use crate::rout2::{Node, RoutingTable};
+use crate::rout2::{KnownNode, Node, RoutingTable};
 use crate::state2::{State, StateClient, StateErr};
-// use crate::routing::KnownNode;
 
 // TODO separate Rust API (put,get) and RPC api
 
@@ -93,10 +92,10 @@ impl<'k> Kad2 {
                 // TODO Wait what about the hash of the key ?
                 Reply::Ping // TODO ping ? really ?
             }
-            Request::FindNode(_id) => {
+            Request::FindNode(id) => {
                 // TODO find closest nodes in routes
-                let _res: Result<(), StateErr> = state.router.closest_nodes().await;
-                Reply::FindNode(vec![])
+                let res: Result<Vec<KnownNode>, StateErr> = state.router.closest_nodes(id).await;
+                Reply::FindNode(res.unwrap()) // TODO err handling
             }
             Request::FindValue(_k) => {
                 // TODO hash key
