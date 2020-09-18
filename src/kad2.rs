@@ -14,7 +14,7 @@ use tokio_util::codec::Decoder;
 // use crate::key::Key;
 use crate::proto2::{CodecErr, ProtoErr, ProtocolCodec, Reply, Request};
 use crate::rout2::{Node, RoutingTable};
-use crate::state2::{CmdChans, State};
+use crate::state2::{State, StateClient, StateErr};
 // use crate::routing::KnownNode;
 
 // TODO separate Rust API (put,get) and RPC api
@@ -54,9 +54,9 @@ impl<'k> Kad2 {
                     return CodecErr::from(e); // TODO not CodecErr
                 })?; // returns Result<_, CodecErr>
 
-                let state_client = state_client.clone();
+                let state = state_client.clone();
                 tokio::spawn(async move {
-                    Self::handle_stream(stream, state_client).await; // TODO err handling
+                    Self::handle_stream(stream, state).await; // TODO err handling
                 });
             }
         });
@@ -65,7 +65,7 @@ impl<'k> Kad2 {
         Ok(fut)
     }
 
-    pub async fn handle_stream(stream: TcpStream, state_client: CmdChans) {
+    pub async fn handle_stream(stream: TcpStream, state: StateClient) {
         // create a codec per connection to parse all messages sent on that connection
         let codec = ProtocolCodec::new();
         let mut framed_codec_stream = codec.framed(stream); // no split ?
@@ -74,7 +74,7 @@ impl<'k> Kad2 {
         while let Some(res) = framed_codec_stream.next().await {
             match res {
                 Ok(req) => {
-                    let _resp = Self::process(req, state_client.clone());
+                    let _resp = Self::process(req, state.clone());
                     //  MONDAY TODO respond on the stream
                 }
                 Err(e) => println!("ERROR: {}", e),
@@ -82,19 +82,20 @@ impl<'k> Kad2 {
         }
     }
 
-    pub fn process(req: Request, state_client: CmdChans) -> Reply {
+    pub async fn process(req: Request, state: StateClient) -> Reply {
         // TODO request needs to contain src Node
         // TODO update routes with src Node
         println!("GOT: {:?}", &req);
         match req {
             Request::Ping => Reply::Ping,
-            Request::Store(_k, _v) => {
-                // TODO store value
-                // state_client.kv
-                Reply::Ping
+            Request::Store(k, v) => {
+                let _res: Result<(), StateErr> = state.kv.set(k, v).await;
+                // TODO Wait what about the hash of the key ?
+                Reply::Ping // TODO ping ? really ?
             }
             Request::FindNode(_id) => {
                 // TODO find closest nodes in routes
+                let _res: Result<(), StateErr> = state.router.closest_nodes().await;
                 Reply::FindNode(vec![])
             }
             Request::FindValue(_k) => {

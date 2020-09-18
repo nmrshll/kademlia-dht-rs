@@ -3,8 +3,40 @@ use std::collections::HashMap;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
 //
-use crate::rout2::{Node, RoutingTable};
+use crate::rout2::{KnownNode, Node, RoutingTable};
 use crate::Key;
+
+pub struct State {}
+impl State {
+    pub fn start(node_self: Node) -> (StateTasks, StateClient) {
+        let (kv_man, task_kv) = KvStateMan::start();
+        let (router_man, task_router) = RouterStateMan::start(node_self);
+
+        return (
+            StateTasks {
+                kv: task_kv,
+                router: task_router,
+            },
+            StateClient {
+                kv: kv_man,
+                router: router_man,
+            },
+        );
+    }
+}
+#[derive(Clone)]
+pub struct StateClient {
+    pub kv: KvStateMan,
+    pub router: RouterStateMan,
+}
+pub struct StateTasks {
+    pub kv: JoinHandle<()>,
+    pub router: JoinHandle<()>,
+}
+
+////////////////////////
+/// Key-value store
+////////////
 
 /// Provided by the requester and used by the manager task to send
 /// the command response back to the requester.
@@ -22,36 +54,6 @@ pub enum KvCmd {
         resp: Responder<()>,
     },
 }
-/// A command for the router task
-#[derive(Debug)]
-pub enum RouterCmd {
-    GetClosestNodes { resp: Responder<()> },
-    Update,
-    Remove,
-    // TODO maybe more ?
-}
-
-pub struct State2 {}
-impl State2 {
-    pub fn start(node_self: Node) -> (StateTasks, StateClient) {
-        let (kv_man, task_kv) = KvStateMan::start();
-        let (router_man, task_router) = RouterStateMan::start(node_self);
-
-        return (
-            StateTasks {
-                kv: task_kv,
-                router: task_router,
-            },
-            (kv_man, router_man),
-        );
-    }
-}
-pub type StateClient = (KvStateMan, RouterStateMan);
-pub struct StateTasks {
-    pub kv: JoinHandle<()>,
-    pub router: JoinHandle<()>,
-}
-
 #[derive(Clone)]
 pub struct KvStateMan {
     tx: mpsc::Sender<KvCmd>,
@@ -104,6 +106,18 @@ impl KvStateMan {
     }
 }
 
+///////////////////////////
+/// Router
+//////////////
+
+/// A command for the router task
+#[derive(Debug)]
+pub enum RouterCmd {
+    GetClosestNodes { resp: Responder<Vec<KnownNode>> },
+    Update,
+    Remove,
+    // TODO maybe more ?
+}
 #[derive(Clone)]
 pub struct RouterStateMan {
     tx: mpsc::Sender<RouterCmd>,
@@ -121,7 +135,7 @@ impl RouterStateMan {
                         let res = router.closest_nodes(Key::random(), 3); // TODO not random
 
                         // Ignore errors
-                        let _ = resp.send(Ok(())); // TODO error handling
+                        let _ = resp.send(Ok(res)); // TODO error handling
                     }
                     _ => unimplemented!(), // TODO implement other varidants
                 }
@@ -131,6 +145,16 @@ impl RouterStateMan {
     }
 
     // TODO implement requests
+    pub async fn closest_nodes(mut self) -> Result<Vec<KnownNode>, StateErr> {
+        let (resp, resp_rx) = oneshot::channel();
+        let cmd = RouterCmd::GetClosestNodes { resp };
+        // Send the SET request
+        self.tx.send(cmd).await.unwrap();
+        // Await the response
+        let res: Result<Vec<KnownNode>, StateErr> = resp_rx.await.unwrap(/*RecvError*/); // TODO err handling
+        println!("GOT = {:?}", res);
+        Ok(res.unwrap()) // TODO err handling
+    }
 }
 
 use thiserror::Error;
@@ -144,8 +168,8 @@ pub enum StateErr {
 /// Old state manager
 //////////
 
-pub struct State {}
-impl State {
+pub struct State_Old {}
+impl State_Old {
     pub fn start(node_self: Node) -> (StateTasks, CmdChans) {
         // Create new state
         let mut kv: HashMap<String, String> = HashMap::new();
