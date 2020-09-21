@@ -4,12 +4,11 @@ use crate::rout2::KnownNode;
 pub const A_CONCURRENT_REQUESTS: usize = 3;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-// #[serde(tag = "type")]
 pub enum Request {
     Ping,
-    Store(String, String),
+    Store(Key, String), // TODO genericity
     FindNode(Key),
-    FindValue(String),
+    FindValue(Key),
 }
 // pub struct StoreReq {
 //     Key: String,
@@ -20,11 +19,11 @@ pub enum Request {
 pub enum Reply {
     Ping,
     FindNode(Vec<KnownNode>),
-    FindValue(FindValueResp),
+    FindVal(FindValResp),
     Err(ProtoErr),
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum FindValueResp {
+pub enum FindValResp {
     Nodes(Vec<KnownNode>),
     Value(String),
 }

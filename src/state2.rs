@@ -45,11 +45,11 @@ type Responder<T> = oneshot::Sender<Result<T, StateErr>>;
 #[derive(Debug)]
 pub enum KvCmd {
     Get {
-        key: String,
+        key: Key,
         resp: Responder<Option<String>>,
     },
     Set {
-        key: String,
+        key: Key,
         val: String,
         resp: Responder<()>,
     },
@@ -61,7 +61,7 @@ pub struct KvStateMan {
 impl KvStateMan {
     pub fn start() -> (Self, JoinHandle<()>) {
         // Create state and channel to send commands to the kv manager task
-        let mut kv: HashMap<String, String> = HashMap::new();
+        let mut kv: HashMap<Key, String> = HashMap::new();
         let (tx_kv, mut rx) = mpsc::channel(32);
 
         let task_kv = tokio::spawn(async move {
@@ -84,7 +84,7 @@ impl KvStateMan {
     }
 
     // We'll have to pass a clone of self to be consumed by the async functions
-    pub async fn get(mut self, key: String) -> Result<Option<String>, StateErr> {
+    pub async fn get(mut self, key: Key) -> Result<Option<String>, StateErr> {
         let (resp_tx, resp_rx) = oneshot::channel();
         let cmd = KvCmd::Get { key, resp: resp_tx };
         // Send the get request
@@ -94,7 +94,7 @@ impl KvStateMan {
         println!("GOT = {:?}", res);
         Ok(res)
     }
-    pub async fn set(mut self, key: String, val: String) -> Result<(), StateErr> {
+    pub async fn set(mut self, key: Key, val: String) -> Result<(), StateErr> {
         let (resp, resp_rx) = oneshot::channel();
         let cmd = KvCmd::Set { key, val, resp };
         // Send the SET request

@@ -12,7 +12,7 @@ use tokio::task::JoinHandle;
 use tokio_util::codec::Decoder;
 
 // use crate::key::Key;
-use crate::proto2::{CodecErr, ProtoErr, ProtocolCodec, Reply, Request};
+use crate::proto2::{CodecErr, FindValResp, ProtoErr, ProtocolCodec, Reply, Request};
 use crate::rout2::{KnownNode, Node, RoutingTable};
 use crate::state2::{State, StateClient, StateErr};
 
@@ -90,18 +90,28 @@ impl<'k> Kad2 {
             Request::Store(k, v) => {
                 let _res: Result<(), StateErr> = state.kv.set(k, v).await;
                 // TODO Wait what about the hash of the key ?
-                Reply::Ping // TODO ping ? really ?
+                Reply::Ping // TODO ping ? really ? find a way to communicate error
             }
             Request::FindNode(id) => {
                 // TODO find closest nodes in routes
                 let res: Result<Vec<KnownNode>, StateErr> = state.router.closest_nodes(id).await;
                 Reply::FindNode(res.unwrap()) // TODO err handling
             }
-            Request::FindValue(_k) => {
-                // TODO hash key
-                // TODO lookup hash in store
-                // TODO return value if found, FindValueResult::Nodes with closest nodes if not found
-                Reply::Ping
+            Request::FindValue(k) => {
+                // let hash = k.hash(); // The key is the hash already
+                // lookup Key in store
+                let res: Result<Option<String>, StateErr> = state.kv.get(k).await;
+                let fvr: FindValResp = match res {
+                    // return value if found
+                    Ok(Some(val_str)) => FindValResp::Value(val_str),
+                    // if not found, return closest nodes
+                    _ => {
+                        let closest_nodes: Vec<KnownNode> =
+                            state.router.closest_nodes(k).await.unwrap(); // TODO err handling
+                        FindValResp::Nodes(closest_nodes)
+                    }
+                };
+                Reply::FindVal(fvr)
             }
             // TODO for error management return a reply with an error if error
             _ => Reply::Err(ProtoErr::Unknown), // TODO above in match arms
@@ -116,12 +126,12 @@ impl<'k> Kad2 {
 type KadHandle =
     futures::future::Join3<JoinHandle<Result<(), CodecErr>>, JoinHandle<()>, JoinHandle<()>>;
 
-// use thiserror::Error;
+use thiserror::Error;
 
-// #[derive(Error, Debug)]
-// pub enum KadErr {
-//     #[error("unknown Request")]
-//     UnknownRequest,
-//     #[error("unknown ProtocolCodec error")]
-//     Unknown,
-// }
+#[derive(Error, Debug)]
+pub enum ReqHandleErr {
+    #[error("ProtocolCodec IoErr: {0}")]
+    StateErr(#[from] StateErr),
+    #[error("unknown ProtocolCodec error")]
+    Unknown,
+}
