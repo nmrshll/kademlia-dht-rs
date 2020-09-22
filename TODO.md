@@ -2,6 +2,7 @@
 
 - error handling in proto::Reply
 - make request contain source Node (or just key and get addr from tcp/quic)
+- client rpc and rust API for Kad
 - networking: Request instead of DummyData
   - fix tests for Request Codec
   - figure out streaming several Requests with Codec
