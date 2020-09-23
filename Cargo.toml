@@ -19,6 +19,7 @@ thiserror = "1.0.20"
 tracing = "0.1" # for async info/warn/trace
 # TEMP tokio codecs
 bytes = "0.5.4" # for tokio codecs
+derive_more = "0.99.10"
 # tokio-serde-json = "0.2" # for tokio codecs
 
 # RM for tokio serde json/bincode

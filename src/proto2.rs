@@ -1,5 +1,8 @@
+use thiserror::Error;
+//
 use crate::key::Key;
 use crate::rout2::KnownNode;
+use crate::state2::StateErr;
 
 pub const A_CONCURRENT_REQUESTS: usize = 3;
 
@@ -10,22 +13,32 @@ pub enum Request {
     FindNode(Key),
     FindValue(Key),
 }
-// pub struct StoreReq {
-//     Key: String,
-//     Value: String,
-// }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, derive_more::From)]
 pub enum Reply {
     Ping,
     FindNode(Vec<KnownNode>),
     FindVal(FindValResp),
+    #[from] // auto-implement From<ProtoErr>
     Err(ProtoErr),
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum FindValResp {
     Nodes(Vec<KnownNode>),
     Value(String),
+}
+impl From<Result<Reply, ProtoErr>> for Reply {
+    fn from(res: Result<Reply, ProtoErr>) -> Self {
+        res.unwrap_or_else(Reply::from)
+    }
+}
+
+#[derive(Error, Debug, Clone, Serialize, Deserialize)]
+pub enum ProtoErr {
+    #[error("state err: {0}")]
+    StateErr(#[from] StateErr),
+    #[error("unknown Protocol error")]
+    Unknown,
 }
 
 ///////////////////
@@ -94,8 +107,6 @@ impl Encoder<Request> for ProtocolCodec {
 // ERRORS
 ///////////////
 
-use thiserror::Error;
-
 #[derive(Error, Debug)]
 pub enum CodecErr {
     #[error("ProtocolCodec IoErr: {0}")]
@@ -115,12 +126,6 @@ impl PartialEq for CodecErr {
             _ => false,
         }
     }
-}
-
-#[derive(Error, Debug, Clone, Serialize, Deserialize)]
-pub enum ProtoErr {
-    #[error("unknown Protocol error")]
-    Unknown,
 }
 
 #[cfg(test)]

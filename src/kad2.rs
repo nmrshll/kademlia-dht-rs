@@ -69,33 +69,35 @@ impl<'k> Kad2 {
         let codec = ProtocolCodec::new();
         let mut framed_codec_stream = codec.framed(stream); // no split ?
 
-        // TODO is this spawn needed ?
+        // TODO this this spawn needed ?
         while let Some(res) = framed_codec_stream.next().await {
             match res {
                 Ok(req) => {
-                    let _resp = Self::process(req, state.clone());
-                    //  MONDAY TODO respond on the stream
+                    let res = Self::process(req, state.clone()).await;
+                    // transform any error into a Reply
+                    let reply: Reply = res.unwrap_or_else(Reply::from);
+                    //  NEXT TIME TODO respond on the stream
                 }
                 Err(e) => println!("ERROR: {}", e),
             }
         }
     }
 
-    pub async fn process(req: Request, state: StateClient) -> Reply {
+    pub async fn process(req: Request, state: StateClient) -> Result<Reply, ProtoErr> {
         // TODO request needs to contain src Node
         // TODO update routes with src Node
         println!("GOT: {:?}", &req);
         match req {
-            Request::Ping => Reply::Ping,
+            Request::Ping => Ok(Reply::Ping),
             Request::Store(k, v) => {
-                let _res: Result<(), StateErr> = state.kv.set(k, v).await;
+                let _res: () = state.kv.set(k, v).await?;
                 // TODO Wait what about the hash of the key ?
-                Reply::Ping // TODO ping ? really ? find a way to communicate error
+                Ok(Reply::Ping) // TODO ping ? really ? find a way to communicate error
             }
             Request::FindNode(id) => {
-                // TODO find closest nodes in routes
-                let res: Result<Vec<KnownNode>, StateErr> = state.router.closest_nodes(id).await;
-                Reply::FindNode(res.unwrap()) // TODO err handling
+                // find closest nodes in routes
+                let res: Vec<KnownNode> = state.router.closest_nodes(id).await?;
+                Ok(Reply::FindNode(res))
             }
             Request::FindValue(k) => {
                 // let hash = k.hash(); // The key is the hash already
@@ -106,15 +108,12 @@ impl<'k> Kad2 {
                     Ok(Some(val_str)) => FindValResp::Value(val_str),
                     // if not found, return closest nodes
                     _ => {
-                        let closest_nodes: Vec<KnownNode> =
-                            state.router.closest_nodes(k).await.unwrap(); // TODO err handling
+                        let closest_nodes: Vec<KnownNode> = state.router.closest_nodes(k).await?;
                         FindValResp::Nodes(closest_nodes)
                     }
                 };
-                Reply::FindVal(fvr)
+                Ok(Reply::FindVal(fvr))
             }
-            // TODO for error management return a reply with an error if error
-            _ => Reply::Err(ProtoErr::Unknown), // TODO above in match arms
         }
     }
 
