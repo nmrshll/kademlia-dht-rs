@@ -94,11 +94,11 @@ impl Decoder for ProtocolCodec {
         return Ok(Some(req));
     }
 }
-impl Encoder<Request> for ProtocolCodec {
+impl Encoder<Reply> for ProtocolCodec {
     type Error = CodecErr;
 
-    fn encode(&mut self, req: Request, dest: &mut BytesMut) -> Result<(), CodecErr> {
-        serde_json::to_writer(dest.writer(), &req)?;
+    fn encode(&mut self, rep: Reply, dest: &mut BytesMut) -> Result<(), CodecErr> {
+        serde_json::to_writer(dest.writer(), &rep)?;
         Ok(())
     }
 }
@@ -180,7 +180,7 @@ mod tests {
     fn msg_encode() {
         // The encoder is responsible for turning a message (Request) into byte frames
         let mut codec = ProtocolCodec::new();
-        let msg = Request::Ping;
+        let msg = Reply::Ping;
 
         // Create a buffer to encode the message to
         let mut output = BytesMut::new();

@@ -1,15 +1,14 @@
-// use futures::stream::FuturesUnordered;
-use futures::future;
+use futures::{future, SinkExt, StreamExt};
 use std::error::Error;
 use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use thiserror::Error;
 // use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::stream::StreamExt;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
-use tokio_util::codec::Decoder;
+use tokio_util::codec::Framed;
 
 // use crate::key::Key;
 use crate::proto2::{CodecErr, FindValResp, ProtoErr, ProtocolCodec, Reply, Request};
@@ -55,7 +54,9 @@ impl<'k> Kad2 {
 
                 let state = state_client.clone();
                 tokio::spawn(async move {
-                    Self::handle_stream(stream, state).await; // TODO err handling
+                    if let Err(e) = Self::handle_stream(stream, state).await {
+                        println!("failed to handle stream: {}", e);
+                    }
                 });
             }
         });
@@ -64,23 +65,28 @@ impl<'k> Kad2 {
         Ok(fut)
     }
 
-    pub async fn handle_stream(stream: TcpStream, state: StateClient) {
+    pub async fn handle_stream(stream: TcpStream, state: StateClient) -> Result<(), ReqHandleErr> {
+        let mut framed2 = Framed::new(stream, ProtocolCodec);
         // create a codec per connection to parse all messages sent on that connection
-        let codec = ProtocolCodec::new();
-        let mut framed_codec_stream = codec.framed(stream); // no split ?
+        // let codec = ProtocolCodec::new();
+        // let (wh, mut rh) = codec.framed(stream).split(); // no split ?
+        // or
+        // let (send, recv) = tokio::io::split(framed_codec_stream);
 
         // TODO this this spawn needed ?
-        while let Some(res) = framed_codec_stream.next().await {
+        while let Some(res) = framed2.next().await {
             match res {
                 Ok(req) => {
                     let res = Self::process(req, state.clone()).await;
                     // transform any error into a Reply
                     let reply: Reply = res.unwrap_or_else(Reply::from);
-                    //  NEXT TIME TODO respond on the stream
+                    // respond on the sink
+                    framed2.send(reply).await?;
                 }
-                Err(e) => println!("ERROR: {}", e),
+                Err(e) => println!("ERROR: {}", e), // we don't want to return here
             }
         }
+        Ok(())
     }
 
     pub async fn process(req: Request, state: StateClient) -> Result<Reply, ProtoErr> {
@@ -125,12 +131,12 @@ impl<'k> Kad2 {
 type KadHandle =
     futures::future::Join3<JoinHandle<Result<(), CodecErr>>, JoinHandle<()>, JoinHandle<()>>;
 
-use thiserror::Error;
-
 #[derive(Error, Debug)]
 pub enum ReqHandleErr {
-    #[error("ProtocolCodec IoErr: {0}")]
+    #[error("CodecErr: {0}")]
+    CodecErr(#[from] CodecErr),
+    #[error("State err: {0}")]
     StateErr(#[from] StateErr),
-    #[error("unknown ProtocolCodec error")]
-    Unknown,
+    #[error("unknown error: {0}")]
+    Unknown(#[from] Box<dyn std::error::Error>),
 }
