@@ -249,11 +249,3 @@ mod tests {
         );
     }
 }
-
-// TOKIO CODEC BINCODE
-// FramedRead upgrades TcpStream from an AsyncRead to a Stream
-// type IOErrorStream = FramedRead<TcpStream, LengthDelimitedCodec>;
-// stream::FromErr maps underlying IO errors into Bincode errors
-// type BincodeErrStream = stream::FromErr<IOErrorStream, bincode::Error>;
-// ReadBincode maps underlying bytes into Bincode-deserializable structs
-// type BincodeStream = ReadBincode<BincodeErrStream, DummyData>;
