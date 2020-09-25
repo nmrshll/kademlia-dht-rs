@@ -1,6 +1,5 @@
 # TODO
 
-- respond on the stream
 - make request contain source Node (or just key and get addr from tcp/quic)
 - client rpc and rust API for Kad
 - networking: Request instead of DummyData
@@ -11,5 +10,6 @@
 
 ## DONE
 
+- respond on the stream
 - start Request handlers
 - error handling in proto::Reply

@@ -67,24 +67,14 @@ impl<'k> Kad2 {
 
     pub async fn handle_stream(stream: TcpStream, state: StateClient) -> Result<(), ReqHandleErr> {
         let mut framed2 = Framed::new(stream, ProtocolCodec);
-        // create a codec per connection to parse all messages sent on that connection
-        // let codec = ProtocolCodec::new();
-        // let (wh, mut rh) = codec.framed(stream).split(); // no split ?
-        // or
-        // let (send, recv) = tokio::io::split(framed_codec_stream);
 
-        // TODO this this spawn needed ?
-        while let Some(res) = framed2.next().await {
-            match res {
-                Ok(req) => {
-                    let res = Self::process(req, state.clone()).await;
-                    // transform any error into a Reply
-                    let reply: Reply = res.unwrap_or_else(Reply::from);
-                    // respond on the sink
-                    framed2.send(reply).await?;
-                }
-                Err(e) => println!("ERROR: {}", e), // we don't want to return here
-            }
+        while let Some(framed_res) = framed2.next().await {
+            let req = framed_res?;
+            let proc_res = Self::process(req, state.clone()).await;
+            // transform any error into a Reply
+            let reply: Reply = proc_res.unwrap_or_else(Reply::from);
+
+            framed2.send(reply).await?;
         }
         Ok(())
     }
