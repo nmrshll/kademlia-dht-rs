@@ -11,14 +11,13 @@ pub const K_ENTRIES_PER_BUCKET: usize = 8;
 pub struct Node {
     pub id: Key,
     pub addr: SocketAddr,
-    pub net_id: String, // TODO move to RoutingTable ?
+    // pub net_id: String, // TODO move to RoutingTable ?
 }
 impl Node {
     pub fn new_self(addr: &SocketAddr) -> Result<Self, Box<dyn Error>> {
         Ok(Node {
             id: Key::random(),
             addr: addr.clone(), // TODO &'a (prob with Deserialize)
-            net_id: String::from("tender_test_net"),
         })
     }
 }
@@ -51,6 +50,7 @@ impl Ord for KnownNode {
 /// RoutingTable keeps nodes sorted, gets updated on requests
 #[derive(Debug)]
 pub struct RoutingTable {
+    pub net_id: String,
     pub node_self: Node,
     buckets: Vec<Vec<Node>>, // TODO mutex with slot-level locking (i.e. inside the Vec<Vec<>>) (rather than on the whole routing table)
 }
@@ -63,6 +63,7 @@ impl<'a> RoutingTable {
         let mut ret = RoutingTable {
             node_self: node_self.clone(),
             buckets: buckets,
+            net_id: String::from("tender_test_net"),
         };
         ret.update(node_self); // TODO &'a
         ret
