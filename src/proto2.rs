@@ -7,7 +7,16 @@ use crate::state2::StateErr;
 pub const A_CONCURRENT_REQUESTS: usize = 3;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub enum Request {
+pub struct Request {
+    pub header: RequestHeader,
+    pub body: RequestBody,
+}
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct RequestHeader {
+    pub sender_key: Key,
+}
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum RequestBody {
     Ping,
     Store(Key, String), // TODO genericity
     FindNode(Key),
@@ -97,8 +106,16 @@ impl Decoder for ProtocolCodec {
 impl Encoder<Reply> for ProtocolCodec {
     type Error = CodecErr;
 
-    fn encode(&mut self, rep: Reply, dest: &mut BytesMut) -> Result<(), CodecErr> {
-        serde_json::to_writer(dest.writer(), &rep)?;
+    fn encode(&mut self, src: Reply, dest: &mut BytesMut) -> Result<(), CodecErr> {
+        serde_json::to_writer(dest.writer(), &src)?;
+        Ok(())
+    }
+}
+impl Encoder<Request> for ProtocolCodec {
+    type Error = CodecErr;
+
+    fn encode(&mut self, src: Request, dest: &mut BytesMut) -> Result<(), CodecErr> {
+        serde_json::to_writer(dest.writer(), &src)?;
         Ok(())
     }
 }
@@ -133,10 +150,17 @@ mod tests {
     use super::*;
     use bytes::Bytes;
 
-    #[test]
-    fn test_add() {
-        assert_eq!(1 + 2, 3);
+    pub struct Fixtures {
+        pub header: RequestHeader,
     }
+    const FIX: Fixtures = Fixtures {
+        header: RequestHeader {
+            sender_key: Key([
+                215, 143, 10, 139, 92, 203, 190, 187, 158, 162, 173, 105, 244, 90, 223, 71, 42,
+                164, 121, 111,
+            ]),
+        },
+    };
 
     // To test a decoder, iterate over the output of each function call
     // and push the results to a Vec<Result<Option<Request>, CodecErr>>.
@@ -156,10 +180,10 @@ mod tests {
     }
 
     #[test]
-    fn msg_decode() {
+    fn decode_request() {
         // Instantiate a Codec, and Bytes to be decoded into Request correctly
         let mut codec = ProtocolCodec::new();
-        let mut bytes = BytesMut::from(b"\"Ping\"".as_ref());
+        let mut bytes = BytesMut::from(b"{\"header\":{\"sender_key\":[215,143,10,139,92,203,190,187,158,162,173,105,244,90,223,71,42,164,121,111]},\"body\":\"Ping\"}".as_ref());
 
         // Finally consume the input bytes, and compare the frames that
         // that the decode function returns.
@@ -173,11 +197,17 @@ mod tests {
         // it should return a single Request frame in the form of a
         // message event that contains the expected value.
         let first_res: &Result<Request, CodecErr> = res_vec.first().unwrap();
-        assert_eq!(*first_res, Ok(Request::Ping));
+        assert_eq!(
+            *first_res,
+            Ok(Request {
+                header: FIX.header,
+                body: RequestBody::Ping,
+            })
+        ); // TODO fill and re-activate
     }
 
     #[test]
-    fn msg_encode() {
+    fn encode_reply() {
         // The encoder is responsible for turning a message (Request) into byte frames
         let mut codec = ProtocolCodec::new();
         let msg = Reply::Ping;
@@ -193,6 +223,29 @@ mod tests {
             output,
             // The output should have the following bytes in the buffer
             Bytes::from(b"\"Ping\"".as_ref()),
+        );
+    }
+
+    #[test]
+    fn encode_request() {
+        // The encoder is responsible for turning a message (Request) into byte frames
+        let mut codec = ProtocolCodec::new();
+        let msg = Request {
+            header: FIX.header,
+            body: RequestBody::Ping,
+        };
+
+        // Create a buffer to encode the message into
+        let mut output = BytesMut::new();
+        codec
+            .encode(msg, &mut output)
+            .expect("Invalid encoding sequence");
+
+        // utf8 output
+        assert_eq!(
+            output,
+            // The output should have the following bytes in the buffer
+            Bytes::from(b"{\"header\":{\"sender_key\":[215,143,10,139,92,203,190,187,158,162,173,105,244,90,223,71,42,164,121,111]},\"body\":\"Ping\"}".as_ref()),
         );
     }
 }

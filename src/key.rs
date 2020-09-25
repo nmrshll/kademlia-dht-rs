@@ -7,7 +7,7 @@ use std::fmt::{Debug, Error, Formatter};
 pub const KEY_LEN: usize = 20; // = 160 bits
 
 #[derive(Hash, Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Serialize, Deserialize)]
-pub struct Key([u8; KEY_LEN]);
+pub struct Key(pub [u8; KEY_LEN]);
 impl Key {
     /// Returns a random, KEY_LEN long byte string.
     pub fn random() -> Key {
@@ -16,6 +16,10 @@ impl Key {
             res[i] = rand::random::<u8>();
         }
         Key(res)
+    }
+    // TODO useless unless more generic, can be constructed from bytes array directly
+    pub fn from_bytes(bytes: &[u8; KEY_LEN]) -> Self {
+        Key(*bytes)
     }
 
     /// Returns the hashed Key of data.
@@ -52,6 +56,11 @@ impl Debug for Key {
         Ok(())
     }
 }
+// impl<B: AsRef<[u8; 20]> + Copy> From<B> for Key {
+//     fn from(b: B) -> Self {
+//         Key(*b)
+//     }
+// }
 
 #[derive(Hash, Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Serialize, Deserialize)]
 pub struct Distance([u8; KEY_LEN]);

@@ -1,6 +1,5 @@
-// use bytes::Bytes;
 use std::collections::HashMap;
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{mpsc, mpsc::error::SendError, oneshot, oneshot::error::RecvError};
 use tokio::task::JoinHandle;
 //
 use crate::rout2::{KnownNode, Node, RoutingTable};
@@ -83,7 +82,7 @@ impl KvStateMan {
         (KvStateMan { tx: tx_kv }, task_kv)
     }
 
-    // We'll have to pass a clone of self to be consumed by the async functions
+    // pass a clone of self to be consumed by the async functions
     pub async fn get(mut self, key: Key) -> Result<Option<String>, StateErr> {
         let (resp_tx, resp_rx) = oneshot::channel();
         let cmd = KvCmd::Get { key, resp: resp_tx };
@@ -117,7 +116,10 @@ pub enum RouterCmd {
         key: Key,
         resp: Responder<Vec<KnownNode>>,
     },
-    Update,
+    Update {
+        new_node: Node,
+        resp: Responder<()>,
+    },
     Remove,
     // TODO maybe more ?
 }
@@ -128,17 +130,23 @@ pub struct RouterStateMan {
 impl RouterStateMan {
     pub fn start(node_self: Node) -> (Self, JoinHandle<()>) {
         // Create state and chan to send commands to the router manager task
-        let router = RoutingTable::new(&node_self);
+        let mut router = RoutingTable::new(&node_self);
         let (tx_router, mut rx) = mpsc::channel(32);
 
         let task_router = tokio::spawn(async move {
             while let Some(cmd) = rx.recv().await {
                 match cmd {
                     RouterCmd::GetClosestNodes { key, resp } => {
-                        let res = router.closest_nodes(key, 3); // TODO not random
-
-                        // Ignore errors
-                        let _ = resp.send(Ok(res)); // TODO error handling
+                        let res = router.closest_nodes(key, 3);
+                        if let Err(resp) = resp.send(Ok(res)) {
+                            println!("failed responding with: {:?}", resp);
+                        }
+                    }
+                    RouterCmd::Update { new_node, resp } => {
+                        router.update(&new_node);
+                        if let Err(resp) = resp.send(Ok(())) {
+                            println!("failed responding with: {:?}", resp);
+                        }
                     }
                     _ => unimplemented!(), // TODO implement other varidants
                 }
@@ -146,23 +154,57 @@ impl RouterStateMan {
         });
         (RouterStateMan { tx: tx_router }, task_router)
     }
-
     // TODO implement requests
+    // pass a clone of self to be consumed by the async functions
     pub async fn closest_nodes(mut self, key: Key) -> Result<Vec<KnownNode>, StateErr> {
         let (resp, resp_rx) = oneshot::channel();
         let cmd = RouterCmd::GetClosestNodes { key, resp };
-        // Send the SET request
-        self.tx.send(cmd).await.unwrap();
-        // Await the response
-        let res: Result<Vec<KnownNode>, StateErr> = resp_rx.await.unwrap(/*RecvError*/); // TODO err handling
+        // Send the SET request, await the response
+        self.tx.send(cmd).await.unwrap(); // SendError
+        let res: Result<Vec<KnownNode>, StateErr> = resp_rx.await?; // RecvError
         println!("GOT = {:?}", res);
-        Ok(res.unwrap()) // TODO err handling
+        res
+    }
+    pub async fn update(mut self, new_node: Node) -> Result<(), StateErr> {
+        let (resp, resp_rx) = oneshot::channel();
+        let cmd = RouterCmd::Update { new_node, resp };
+        // Send the UPDATE request, await the response
+        self.tx.send(cmd).await?; // SendError
+        let res: Result<(), StateErr> = resp_rx.await?; // RecvError
+        println!("GOT = {:?}", res);
+        res
     }
 }
 
 use thiserror::Error;
 #[derive(Error, Debug, Clone, Serialize, Deserialize)]
 pub enum StateErr {
+    #[error("router SendErr")]
+    RouterSendErr,
+    #[error("kv-store SendErr")]
+    KvSendErr,
+    #[error("channel RecvErr")]
+    RecvErr,
+    #[error("actor failed responding: SendErr")]
+    RespSendErr,
     #[error("unknown StateManager error")]
     Unknown,
+}
+impl From<SendError<RouterCmd>> for StateErr {
+    fn from(e: SendError<RouterCmd>) -> Self {
+        eprintln!("SendError: {}", e);
+        StateErr::RouterSendErr
+    }
+}
+impl From<SendError<KvCmd>> for StateErr {
+    fn from(e: SendError<KvCmd>) -> Self {
+        eprintln!("SendError: {}", e);
+        StateErr::KvSendErr
+    }
+}
+impl From<RecvError> for StateErr {
+    fn from(e: RecvError) -> Self {
+        eprintln!("RecvError: {}", e);
+        StateErr::RecvErr
+    }
 }

@@ -11,7 +11,7 @@ use tokio::task::JoinHandle;
 use tokio_util::codec::Framed;
 
 // use crate::key::Key;
-use crate::proto2::{CodecErr, FindValResp, ProtoErr, ProtocolCodec, Reply, Request};
+use crate::proto2::{CodecErr, FindValResp, ProtoErr, ProtocolCodec, Reply, Request, RequestBody};
 use crate::rout2::{KnownNode, Node, RoutingTable};
 use crate::state2::{State, StateClient, StateErr};
 
@@ -47,14 +47,14 @@ impl<'k> Kad2 {
         // Start a server
         let task_kad_server = tokio::spawn(async move {
             loop {
-                let (stream, _addr) = listener.accept().await.map_err(|e: io::Error| {
+                let incoming = listener.accept().await.map_err(|e: io::Error| {
                     tracing::warn!("failed listener.accept(): {:?}", e);
                     return CodecErr::from(e); // TODO not CodecErr
                 })?; // returns Result<_, CodecErr>
 
                 let state = state_client.clone();
                 tokio::spawn(async move {
-                    if let Err(e) = Self::handle_stream(stream, state).await {
+                    if let Err(e) = Self::handle_stream(incoming, state).await {
                         println!("failed to handle stream: {}", e);
                     }
                 });
@@ -65,37 +65,46 @@ impl<'k> Kad2 {
         Ok(fut)
     }
 
-    pub async fn handle_stream(stream: TcpStream, state: StateClient) -> Result<(), ReqHandleErr> {
-        let mut framed2 = Framed::new(stream, ProtocolCodec);
+    pub async fn handle_stream(
+        inc: (TcpStream, SocketAddr),
+        state: StateClient,
+    ) -> Result<(), ReqErr> {
+        let mut framed2 = Framed::new(inc.0, ProtocolCodec);
 
         while let Some(framed_res) = framed2.next().await {
             let req = framed_res?;
-            let proc_res = Self::process(req, state.clone()).await;
-            // transform any error into a Reply
-            let reply: Reply = proc_res.unwrap_or_else(Reply::from);
 
+            // update router with src_node, then process request into a Result<Reply,_>
+            let src_node = Node {
+                key: req.header.sender_key,
+                addr: inc.1,
+            };
+            state.router.clone().update(src_node).await?;
+            let proc_res = Self::process(req, state.clone()).await;
+
+            // transform any error into a Reply, then send it back
+            let reply: Reply = proc_res.unwrap_or_else(Reply::from);
             framed2.send(reply).await?;
         }
         Ok(())
     }
 
     pub async fn process(req: Request, state: StateClient) -> Result<Reply, ProtoErr> {
-        // TODO request needs to contain src Node
-        // TODO update routes with src Node
         println!("GOT: {:?}", &req);
-        match req {
-            Request::Ping => Ok(Reply::Ping),
-            Request::Store(k, v) => {
+
+        match req.body {
+            RequestBody::Ping => Ok(Reply::Ping),
+            RequestBody::Store(k, v) => {
                 let _res: () = state.kv.set(k, v).await?;
-                // TODO Wait what about the hash of the key ?
-                Ok(Reply::Ping) // TODO ping ? really ? find a way to communicate error
+                // TODO Wait what about the hash of the key ? => key is already hashed
+                Ok(Reply::Ping)
             }
-            Request::FindNode(id) => {
+            RequestBody::FindNode(id) => {
                 // find closest nodes in routes
                 let res: Vec<KnownNode> = state.router.closest_nodes(id).await?;
                 Ok(Reply::FindNode(res))
             }
-            Request::FindValue(k) => {
+            RequestBody::FindValue(k) => {
                 // let hash = k.hash(); // The key is the hash already
                 // lookup Key in store
                 let res: Result<Option<String>, StateErr> = state.kv.get(k).await;
@@ -112,17 +121,12 @@ impl<'k> Kad2 {
             }
         }
     }
-
-    // pub async fn node_self(&self) -> Node {
-    //     self.routes.lock().await.node_self.clone() // TODO rm mutex, give back &'k node_self
-    // }
 }
-
 type KadHandle =
     futures::future::Join3<JoinHandle<Result<(), CodecErr>>, JoinHandle<()>, JoinHandle<()>>;
 
 #[derive(Error, Debug)]
-pub enum ReqHandleErr {
+pub enum ReqErr {
     #[error("CodecErr: {0}")]
     CodecErr(#[from] CodecErr),
     #[error("State err: {0}")]

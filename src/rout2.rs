@@ -9,14 +9,14 @@ pub const K_ENTRIES_PER_BUCKET: usize = 8;
 
 #[derive(Hash, Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct Node {
-    pub id: Key,
+    pub key: Key,
     pub addr: SocketAddr,
     // pub net_id: String, // TODO move to RoutingTable ?
 }
 impl Node {
     pub fn new_self(addr: &SocketAddr) -> Result<Self, Box<dyn Error>> {
         Ok(Node {
-            id: Key::random(),
+            key: Key::random(),
             addr: addr.clone(), // TODO &'a (prob with Deserialize)
         })
     }
@@ -72,10 +72,10 @@ impl<'a> RoutingTable {
     // pub fn distance_to(other_node: Node) -> Distance {}
 
     /// Update the appropriate bucket with the new node's info
-    pub fn update(&mut self, node_info: &'a Node) {
-        let bucket_index = self.lookup_bucket_index(node_info.id);
+    pub fn update(&mut self, new_node: &'a Node) {
+        let bucket_index = self.lookup_bucket_index(new_node.key);
         let bucket = &mut self.buckets[bucket_index];
-        let node_index = bucket.iter().position(|x| x.id == node_info.id);
+        let node_index = bucket.iter().position(|x| x.key == new_node.key);
         match node_index {
             Some(i) => {
                 let temp = bucket.remove(i);
@@ -83,7 +83,7 @@ impl<'a> RoutingTable {
             }
             None => {
                 if bucket.len() < K_ENTRIES_PER_BUCKET {
-                    bucket.push(node_info.clone()); // TODO ? clone ?
+                    bucket.push(new_node.clone()); // TODO ? clone ?
                 } else {
                     // go through bucket, pinging nodes, replace one
                     // that doesn't respond.
@@ -105,7 +105,7 @@ impl<'a> RoutingTable {
             for node_info in bucket {
                 ret.push(KnownNode {
                     node: node_info.clone(),
-                    distance: node_info.id.dist(target),
+                    distance: node_info.key.dist(target),
                 });
             }
         }
@@ -115,7 +115,7 @@ impl<'a> RoutingTable {
     }
 
     pub fn remove(&mut self, node_info: &Node) {
-        let bucket_index = self.lookup_bucket_index(node_info.id);
+        let bucket_index = self.lookup_bucket_index(node_info.key);
         if let Some(item_index) = self.buckets[bucket_index]
             .iter()
             .position(|x| x == node_info)
@@ -129,7 +129,7 @@ impl<'a> RoutingTable {
 
     /// TODO document
     fn lookup_bucket_index(&self, item: Key) -> usize {
-        self.node_self.id.dist(item).zeroes_in_prefix()
+        self.node_self.key.dist(item).zeroes_in_prefix()
     }
 
     // TODO impl Debug
