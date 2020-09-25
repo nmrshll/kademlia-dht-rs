@@ -185,8 +185,8 @@ pub enum StateErr {
     KvSendErr,
     #[error("channel RecvErr")]
     RecvErr,
-    #[error("actor failed responding: SendErr")]
-    RespSendErr,
+    // #[error("actor failed responding: SendErr")]
+    // RespSendErr,
     #[error("unknown StateManager error")]
     Unknown,
 }
