@@ -7,11 +7,10 @@ use super::key::{Distance, Key, KEY_LEN};
 pub const N_BUCKETS: usize = KEY_LEN * 8;
 pub const K_ENTRIES_PER_BUCKET: usize = 8;
 
-#[derive(Hash, Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
+#[derive(Hash, Eq, PartialEq, Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Node {
     pub key: Key,
     pub addr: SocketAddr,
-    // pub net_id: String, // TODO move to RoutingTable ?
 }
 impl Node {
     pub fn new_self(addr: &SocketAddr) -> Result<Self, Box<dyn Error>> {

@@ -1,51 +1,35 @@
 use futures::{future, SinkExt, StreamExt};
-use std::error::Error;
 use std::io;
 use std::net::SocketAddr;
-use std::sync::Arc;
 use thiserror::Error;
-// use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tokio_util::codec::Framed;
 
 // use crate::key::Key;
 use crate::proto2::{CodecErr, FindValResp, ProtoErr, ProtocolCodec, Reply, Request, RequestBody};
-use crate::rout2::{KnownNode, Node, RoutingTable};
+use crate::rout2::{KnownNode, Node};
 use crate::state2::{State, StateClient, StateErr};
 
 // TODO separate Rust API (put,get) and RPC api
 
-#[derive(Clone)]
-pub struct Kad2 {
+pub struct Kad {
     // TODO make Kad own only refs/handles and be Copy,
     // then we can use self on methods inside tasks ?
-    routes: Arc<Mutex<RoutingTable>>, // replace with interior mut Sync handle
-    // store: Arc<Mutex<HashMap<String, String>>>,
     pub node_self: Node,
+    pub task:
+        futures::future::Join3<JoinHandle<Result<(), CodecErr>>, JoinHandle<()>, JoinHandle<()>>,
 }
-impl<'k> Kad2 {
-    pub async fn new() -> Result<Kad2, Box<dyn Error>> {
+impl<'k> Kad {
+    pub fn start(_bootstrap: Option<Node>) -> Result<Self, KadErr> {
         let addr: SocketAddr = ([0, 0, 0, 0], 8908).into(); // TODO config::port()
-                                                            // let mut listener = TcpListener::bind(&addr).await?;
         let node_self: Node = Node::new_self(&addr)?;
 
-        Ok(Kad2 {
-            routes: Arc::new(Mutex::new(RoutingTable::new(&node_self))),
-            // store: Arc::new(Mutex::new(Hashmap < String, String > ::new())),
-            node_self,
-        })
-    }
-    pub async fn start(self, _bootstrap: Option<Node>) -> Result<KadHandle, io::Error> {
-        let addr = &self.node_self.addr.clone();
-        let mut listener = TcpListener::bind(addr).await?;
-
         // Start the state manager task
-        let (tasks_state, state_client) = State::start(self.node_self);
-
+        let (tasks_state, state_client) = State::start(node_self);
         // Start a server
         let task_kad_server = tokio::spawn(async move {
+            let mut listener = TcpListener::bind(addr).await?;
             loop {
                 let incoming = listener.accept().await.map_err(|e: io::Error| {
                     tracing::warn!("failed listener.accept(): {:?}", e);
@@ -61,8 +45,11 @@ impl<'k> Kad2 {
             }
         });
 
-        let fut = future::join3(task_kad_server, tasks_state.kv, tasks_state.router);
-        Ok(fut)
+        let futs = future::join3(task_kad_server, tasks_state.kv, tasks_state.router);
+        Ok(Kad {
+            node_self,
+            task: futs,
+        })
     }
 
     pub async fn handle_stream(
@@ -122,8 +109,6 @@ impl<'k> Kad2 {
         }
     }
 }
-type KadHandle =
-    futures::future::Join3<JoinHandle<Result<(), CodecErr>>, JoinHandle<()>, JoinHandle<()>>;
 
 #[derive(Error, Debug)]
 pub enum ReqErr {
@@ -131,6 +116,13 @@ pub enum ReqErr {
     CodecErr(#[from] CodecErr),
     #[error("State err: {0}")]
     StateErr(#[from] StateErr),
+    #[error("unknown error: {0}")]
+    Unknown(#[from] Box<dyn std::error::Error>),
+}
+#[derive(Error, Debug)]
+pub enum KadErr {
+    #[error("IoErr: {0}")]
+    IoErr(#[from] std::io::Error),
     #[error("unknown error: {0}")]
     Unknown(#[from] Box<dyn std::error::Error>),
 }

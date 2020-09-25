@@ -1,4 +1,4 @@
-use kademlia::kad2::Kad2;
+use kademlia::kad2::Kad;
 use std::error::Error;
 use tracing::Level;
 
@@ -9,11 +9,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .finish();
     tracing::subscriber::set_global_default(subscriber).expect("failed setting global subscriber");
 
-    let kad = Kad2::new().await?;
+    let kad = Kad::start(None)?;
     let addr = kad.node_self.addr;
-    let task_kad = kad.start(None).await?;
     tracing::info!("server running on {}", addr);
-    let _ = tokio::join!(task_kad);
+    let _ = tokio::join!(kad.task);
 
     Ok(())
 }
